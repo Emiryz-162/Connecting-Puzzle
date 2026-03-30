@@ -1,38 +1,28 @@
-// ── game/pathfinder.ts ──
-// İki tile arasında en fazla 2 dönüşlü bağlantı yolu arar.
-//
-// Yaklaşım: BFS yerine yapısal enumeration.
-// 0 dönüş (düz hat), 1 dönüş (L-şekli), 2 dönüş (Z/U-şekli)
-// olası tüm yollar doğrudan denenir.
-//
-// Border space: Grid dışı koordinatlar (col<0, col>=width, row<0, row>=height)
-// otomatik olarak yürünebilir kabul edilir. Bu sayede board kenarından
-// dolaşan yollar doğal şekilde bulunur.
-
 import { BoardState, CellKind, Coord, TilePath } from "../types";
 
 /**
- * İki tile arasında geçerli bir bağlantı yolu arar.
- * Yol en fazla 2 adet 90° dönüş içerebilir.
- * Bulursa path node'larını (başlangıç ve bitiş dahil) döndürür.
- * Bulamazsa null döndürür.
+ * Find a valid link path between two tiles with at most 2 turns.
+ * Border-space routing is allowed (outside board bounds).
  */
 export function findPath(board: BoardState, a: Coord, b: Coord): TilePath | null {
-  // Aynı pozisyon eşleşemez
-  if (a.col === b.col && a.row === b.row) return null;
-
-  // Farklı tip eşleşemez
-  const cellA = board.cells[a.row][a.col];
-  const cellB = board.cells[b.row][b.col];
-  if (cellA.tileType !== cellB.tileType) return null;
-
-  // ── 0 dönüş: düz hat ──
-  if (canWalkStraight(board, a, b)) {
-    return [a, b];
+  if (a.col === b.col && a.row === b.row) {
+    return null;
   }
 
-  // ── 1 dönüş: L-şekli ──
-  // İki olası köşe noktası
+  const cellA = board.cells[a.row][a.col];
+  const cellB = board.cells[b.row][b.col];
+  if (cellA.tileType !== cellB.tileType) {
+    return null;
+  }
+
+  const candidates: TilePath[] = [];
+
+  // 0-turn path
+  if (canWalkStraight(board, a, b)) {
+    candidates.push([a, b]);
+  }
+
+  // 1-turn paths
   const corner1: Coord = { col: a.col, row: b.row };
   const corner2: Coord = { col: b.col, row: a.row };
 
@@ -41,7 +31,7 @@ export function findPath(board: BoardState, a: Coord, b: Coord): TilePath | null
     canWalkStraight(board, a, corner1) &&
     canWalkStraight(board, corner1, b)
   ) {
-    return [a, corner1, b];
+    candidates.push([a, corner1, b]);
   }
 
   if (
@@ -49,11 +39,10 @@ export function findPath(board: BoardState, a: Coord, b: Coord): TilePath | null
     canWalkStraight(board, a, corner2) &&
     canWalkStraight(board, corner2, b)
   ) {
-    return [a, corner2, b];
+    candidates.push([a, corner2, b]);
   }
 
-  // ── 2 dönüş: Z/U-şekli ──
-  // Yatay köprüler: her satır (border dahil -1 ve height) denenir
+  // 2-turn horizontal bridges (including border rows)
   for (let r = -1; r <= board.height; r++) {
     const c1: Coord = { col: a.col, row: r };
     const c2: Coord = { col: b.col, row: r };
@@ -65,11 +54,11 @@ export function findPath(board: BoardState, a: Coord, b: Coord): TilePath | null
       canWalkStraight(board, c1, c2) &&
       canWalkStraight(board, c2, b)
     ) {
-      return [a, c1, c2, b];
+      candidates.push([a, c1, c2, b]);
     }
   }
 
-  // Dikey köprüler: her sütun (border dahil -1 ve width) denenir
+  // 2-turn vertical bridges (including border cols)
   for (let c = -1; c <= board.width; c++) {
     const c1: Coord = { col: c, row: a.row };
     const c2: Coord = { col: c, row: b.row };
@@ -81,76 +70,132 @@ export function findPath(board: BoardState, a: Coord, b: Coord): TilePath | null
       canWalkStraight(board, c1, c2) &&
       canWalkStraight(board, c2, b)
     ) {
-      return [a, c1, c2, b];
+      candidates.push([a, c1, c2, b]);
     }
   }
 
-  return null;
+  return pickBestPath(board, candidates);
 }
 
-/**
- * İki nokta arasında düz çizgide yürünebilir mi kontrol eder.
- * Sadece aradaki hücreleri kontrol eder (uç noktalar hariç).
- * İki nokta aynı satır veya sütunda olmalıdır.
- */
 function canWalkStraight(board: BoardState, from: Coord, to: Coord): boolean {
   if (from.row === to.row) {
-    // Yatay yürüyüş
     const row = from.row;
     const minCol = Math.min(from.col, to.col) + 1;
     const maxCol = Math.max(from.col, to.col);
+
     for (let col = minCol; col < maxCol; col++) {
-      if (!isCellWalkable(board, row, col)) return false;
+      if (!isCellWalkable(board, row, col)) {
+        return false;
+      }
     }
     return true;
   }
 
   if (from.col === to.col) {
-    // Dikey yürüyüş
     const col = from.col;
     const minRow = Math.min(from.row, to.row) + 1;
     const maxRow = Math.max(from.row, to.row);
+
     for (let row = minRow; row < maxRow; row++) {
-      if (!isCellWalkable(board, row, col)) return false;
+      if (!isCellWalkable(board, row, col)) {
+        return false;
+      }
     }
     return true;
   }
 
-  // Aynı satır veya sütunda değilse düz yürünemez
   return false;
 }
 
-/**
- * Bir hücrenin path köşe noktası olarak kullanılabilir olup olmadığını kontrol eder.
- * Grid dışı koordinatlar = border space = yürünebilir.
- */
 function isWalkable(board: BoardState, coord: Coord): boolean {
   if (
-    coord.row < 0 || coord.row >= board.height ||
-    coord.col < 0 || coord.col >= board.width
+    coord.row < 0 ||
+    coord.row >= board.height ||
+    coord.col < 0 ||
+    coord.col >= board.width
   ) {
-    return true; // Border space her zaman yürünebilir
+    return true;
   }
+
   return board.cells[coord.row][coord.col].kind === CellKind.Empty;
 }
 
-/**
- * Bir hücrenin yürünebilir olup olmadığını kontrol eder (satır/sütun ile).
- * Grid dışı = yürünebilir.
- */
 function isCellWalkable(board: BoardState, row: number, col: number): boolean {
   if (row < 0 || row >= board.height || col < 0 || col >= board.width) {
     return true;
   }
+
   return board.cells[row][col].kind === CellKind.Empty;
 }
 
-/**
- * Board'da en az bir geçerli eşleşme çifti olup olmadığını kontrol eder.
- * Hiç geçerli hamle kalmamışsa false döndürür.
- */
+interface PathScore {
+  turns: number;
+  distance: number;
+  outsideNodes: number;
+}
+
+function pickBestPath(board: BoardState, candidates: TilePath[]): TilePath | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  let best = candidates[0];
+  let bestScore = scorePath(board, best);
+
+  for (let i = 1; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    const candidateScore = scorePath(board, candidate);
+
+    if (comparePathScore(candidateScore, bestScore) < 0) {
+      best = candidate;
+      bestScore = candidateScore;
+    }
+  }
+
+  return best;
+}
+
+function scorePath(board: BoardState, path: TilePath): PathScore {
+  let distance = 0;
+  let outsideNodes = 0;
+
+  for (let i = 0; i < path.length; i++) {
+    const p = path[i];
+
+    if (p.row < 0 || p.row >= board.height || p.col < 0 || p.col >= board.width) {
+      outsideNodes++;
+    }
+
+    if (i > 0) {
+      const prev = path[i - 1];
+      distance += Math.abs(p.row - prev.row) + Math.abs(p.col - prev.col);
+    }
+  }
+
+  return {
+    turns: Math.max(0, path.length - 2),
+    distance,
+    outsideNodes,
+  };
+}
+
+function comparePathScore(a: PathScore, b: PathScore): number {
+  if (a.turns !== b.turns) {
+    return a.turns - b.turns;
+  }
+
+  if (a.distance !== b.distance) {
+    return a.distance - b.distance;
+  }
+
+  if (a.outsideNodes !== b.outsideNodes) {
+    return a.outsideNodes - b.outsideNodes;
+  }
+
+  return 0;
+}
+
 export function hasAnyValidPair(board: BoardState): boolean {
-  // Tile'ları tipe göre grupla
   const byType = new Map<number, Coord[]>();
 
   for (let row = 0; row < board.height; row++) {
@@ -164,7 +209,6 @@ export function hasAnyValidPair(board: BoardState): boolean {
     }
   }
 
-  // Her tip grubu içinde çift çift path dene
   for (const coords of byType.values()) {
     for (let i = 0; i < coords.length; i++) {
       for (let j = i + 1; j < coords.length; j++) {

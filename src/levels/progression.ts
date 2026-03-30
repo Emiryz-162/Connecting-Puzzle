@@ -4,11 +4,14 @@ export class LevelProgression {
   private readonly levels: LevelDef[];
   private currentIndex = 0;
 
-  constructor(levels: LevelDef[]) {
+  constructor(levels: LevelDef[], startLevelId = 1) {
     if (levels.length === 0) {
       throw new Error("LevelProgression requires at least one level.");
     }
     this.levels = levels;
+
+    const startIndex = this.levels.findIndex((level) => level.id === startLevelId);
+    this.currentIndex = startIndex >= 0 ? startIndex : 0;
   }
 
   getCurrentLevel(): LevelDef {

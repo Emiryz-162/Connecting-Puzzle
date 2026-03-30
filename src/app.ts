@@ -37,6 +37,9 @@ import {
   OVERLAY_BG,
 } from "./constants";
 
+// Test helper: change this to start directly from a specific level id (1..30).
+const START_LEVEL_ID_FOR_TESTING = 30;
+
 export class App {
   private static readonly MAX_INIT_BUILD_ATTEMPTS = 12;
   private static readonly MAX_RESHUFFLE_ATTEMPTS = 24;
@@ -57,7 +60,7 @@ export class App {
   private inputHandler!: InputHandler;
   private lastTimestamp = 0;
 
-  private progression = new LevelProgression(LEVELS);
+  private progression = new LevelProgression(LEVELS, START_LEVEL_ID_FOR_TESTING);
   private campaignCompleted = false;
   private runScore = 0;
   private runScoreSubmitted = false;
