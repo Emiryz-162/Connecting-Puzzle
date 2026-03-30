@@ -1,4 +1,4 @@
-﻿import { LevelDef } from "../types";
+import { LevelDef } from "../types";
 
 type PatternPayload = Pick<LevelDef, "width" | "height" | "layout">;
 
@@ -29,10 +29,9 @@ function patternToLevel(rows: string[], _tileTypeCount: number): PatternPayload 
         case "#":
           outRow.push(-1);
           break;
-        case "*": {
+        case "*":
           outRow.push(-2);
           break;
-        }
         case "J":
           outRow.push(-3);
           break;
@@ -52,7 +51,7 @@ function patternToLevel(rows: string[], _tileTypeCount: number): PatternPayload 
 }
 
 export const LEVELS: LevelDef[] = [
-  // 1-5: temel eslestirme, gravity yok, ozel engel yok
+  // 1-5: basic matching, no gravity, no blockers
   {
     id: 1,
     width: 6,
@@ -67,36 +66,36 @@ export const LEVELS: LevelDef[] = [
     width: 6,
     height: 5,
     gravity: "none",
-    timerSeconds: 120,
+    timerSeconds: 118,
     tileTypeCount: 4,
     tutorialText: "Look for straight and corner paths.",
   },
   {
     id: 3,
-    width: 8,
-    height: 5,
+    width: 6,
+    height: 6,
     gravity: "none",
-    timerSeconds: 110,
-    tileTypeCount: 5,
+    timerSeconds: 112,
+    tileTypeCount: 4,
   },
   {
     id: 4,
-    width: 8,
-    height: 6,
+    width: 6,
+    height: 7,
     gravity: "none",
-    timerSeconds: 105,
+    timerSeconds: 108,
     tileTypeCount: 5,
   },
   {
     id: 5,
-    width: 9,
-    height: 6,
+    width: 6,
+    height: 8,
     gravity: "none",
-    timerSeconds: 100,
-    tileTypeCount: 6,
+    timerSeconds: 104,
+    tileTypeCount: 5,
   },
 
-  // 6-10: daha sıkisik path dusuncesi, hafif solid kullanimi
+  // 6-10: tighter pathing with light solid usage
   {
     id: 6,
     gravity: "none",
@@ -104,12 +103,14 @@ export const LEVELS: LevelDef[] = [
     tileTypeCount: 4,
     ...patternToLevel(
       [
-        "TTTTTTTT",
-        "TTTTTTTT",
-        "TTT##TTT",
-        "TTT##TTT",
-        "TTTTTTTT",
-        "TTTTTTTT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "TT##TT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT..TT",
+        "TTTTTT",
       ],
       4
     ),
@@ -121,12 +122,14 @@ export const LEVELS: LevelDef[] = [
     tileTypeCount: 5,
     ...patternToLevel(
       [
-        "TTTTTTTT",
-        "TT..TTTT",
-        "TT##TTTT",
-        "TT##TTTT",
-        "TTTT..TT",
-        "TTTTTTTT",
+        "TTTTTT",
+        "T..TTT",
+        "T##TTT",
+        "TT##TT",
+        "TTT..T",
+        "TTTTTT",
+        "TT##TT",
+        "TTTTTT",
       ],
       5
     ),
@@ -138,12 +141,15 @@ export const LEVELS: LevelDef[] = [
     tileTypeCount: 5,
     ...patternToLevel(
       [
-        "TTTTTTTTT",
-        "TTT###TTT",
-        "TT....TTT",
-        "TTT###TTT",
-        "TTTTTTTTT",
-        "TTTTTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "TT..TT",
+        "T####T",
+        "TTTTTT",
+        "TT..TT",
+        "TT##TT",
+        "TTTTTT",
+        "TTTTTT",
       ],
       5
     ),
@@ -155,12 +161,15 @@ export const LEVELS: LevelDef[] = [
     tileTypeCount: 5,
     ...patternToLevel(
       [
-        "TTTTTTTTT",
-        "T##TTTT##",
-        "T..TTTT..",
-        "T##TTTT##",
-        "TTTTTTTTT",
-        "TTTTTTTTT",
+        "TTTTTT",
+        "T##..T",
+        "TTTTTT",
+        "TT##TT",
+        "TT..TT",
+        "TT##TT",
+        "TTTTTT",
+        "T..##T",
+        "TTTTTT",
       ],
       5
     ),
@@ -172,75 +181,82 @@ export const LEVELS: LevelDef[] = [
     tileTypeCount: 6,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "TT##TT##TT",
-        "TT..TT..TT",
-        "TT##TT##TT",
-        "TTTTTTTTTT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "T....T",
+        "TT##TT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "T....T",
+        "TT##TT",
+        "TTTTTT",
       ],
       6
     ),
   },
 
-  // 11-15: gravity tanitimi
+  // 11-15: gravity introduction (portrait-friendly)
   {
     id: 11,
     width: 6,
-    height: 6,
+    height: 7,
     gravity: "down",
-    timerSeconds: 105,
+    timerSeconds: 106,
     tileTypeCount: 4,
     tutorialText: "Tiles settle with gravity after each match.",
   },
   {
     id: 12,
-    width: 7,
-    height: 6,
+    width: 6,
+    height: 8,
     gravity: "down",
-    timerSeconds: 100,
+    timerSeconds: 102,
     tileTypeCount: 5,
   },
   {
     id: 13,
-    width: 8,
-    height: 6,
+    width: 6,
+    height: 8,
     gravity: "down",
-    timerSeconds: 95,
+    timerSeconds: 98,
     tileTypeCount: 5,
   },
   {
     id: 14,
-    width: 8,
-    height: 6,
+    width: 6,
+    height: 9,
     gravity: "left",
-    timerSeconds: 92,
+    timerSeconds: 94,
     tileTypeCount: 6,
   },
   {
     id: 15,
-    width: 9,
-    height: 6,
+    width: 6,
+    height: 10,
     gravity: "up",
-    timerSeconds: 90,
+    timerSeconds: 92,
     tileTypeCount: 6,
   },
 
-  // 16-20: frozen tanitimi ve kombinasyonlari
+  // 16-20: frozen introduction and combos
   {
     id: 16,
     gravity: "down",
-    timerSeconds: 95,
+    timerSeconds: 96,
     tileTypeCount: 5,
     tutorialText: "Frozen tiles unlock when a neighbor pops.",
     ...patternToLevel(
       [
-        "TTTTTTTT",
-        "TTTTTTTT",
-        "TTT**TTT",
-        "TTT**TTT",
-        "TTTTTTTT",
-        "TTTTTTTT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT**TT",
+        "TT**TT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT..TT",
+        "TT..TT",
+        "TTTTTT",
       ],
       5
     ),
@@ -248,16 +264,19 @@ export const LEVELS: LevelDef[] = [
   {
     id: 17,
     gravity: "none",
-    timerSeconds: 92,
+    timerSeconds: 94,
     tileTypeCount: 5,
     ...patternToLevel(
       [
-        "TTTTTTTT",
-        "TT..TTTT",
-        "TT**TTTT",
-        "TTTT**TT",
-        "TTTT..TT",
-        "TTTTTTTT",
+        "TTTTTT",
+        "TT..TT",
+        "TT**TT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT**TT",
+        "TT..TT",
+        "TTTTTT",
+        "TTTTTT",
       ],
       5
     ),
@@ -265,16 +284,20 @@ export const LEVELS: LevelDef[] = [
   {
     id: 18,
     gravity: "down",
-    timerSeconds: 90,
+    timerSeconds: 92,
     tileTypeCount: 6,
     ...patternToLevel(
       [
-        "TTTTTTTTT",
-        "TTT##TTTT",
-        "TTT**TTTT",
-        "TTTT**TTT",
-        "TTTT##TTT",
-        "TTTTTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "TT**TT",
+        "TT..TT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT..TT",
+        "TT**TT",
+        "TT##TT",
+        "TTTTTT",
       ],
       6
     ),
@@ -282,16 +305,20 @@ export const LEVELS: LevelDef[] = [
   {
     id: 19,
     gravity: "right",
-    timerSeconds: 88,
+    timerSeconds: 90,
     tileTypeCount: 6,
     ...patternToLevel(
       [
-        "TTTTTTTTT",
-        "TT##TTTTT",
-        "TT**..TTT",
-        "TTT..**TT",
-        "TTTTT##TT",
-        "TTTTTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "T**..T",
+        "TT..TT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT..TT",
+        "T..**T",
+        "TT##TT",
+        "TTTTTT",
       ],
       6
     ),
@@ -299,36 +326,43 @@ export const LEVELS: LevelDef[] = [
   {
     id: 20,
     gravity: "down",
-    timerSeconds: 86,
+    timerSeconds: 88,
     tileTypeCount: 6,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "TTTT**TTTT",
-        "TT##TT##TT",
-        "TT..TT..TT",
-        "TTTT**TTTT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "TT**TT",
+        "TT##TT",
+        "TT..TT",
+        "TTTTTT",
+        "TTTTTT",
+        "TT..TT",
+        "TT##TT",
+        "TT**TT",
+        "TTTTTT",
       ],
       6
     ),
   },
 
-  // 21-25: solid blocker odakli
+  // 21-25: solid blocker focused boards
   {
     id: 21,
     gravity: "none",
-    timerSeconds: 90,
+    timerSeconds: 92,
     tileTypeCount: 6,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "T###TT###T",
-        "TTTTTTTTTT",
-        "TT##TT##TT",
-        "TTTTTTTTTT",
-        "T###TT###T",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "T####T",
+        "TT##TT",
+        "TTTTTT",
+        "TT##TT",
+        "TT##TT",
+        "TTTTTT",
+        "TT##TT",
+        "T####T",
+        "TTTTTT",
       ],
       6
     ),
@@ -336,17 +370,20 @@ export const LEVELS: LevelDef[] = [
   {
     id: 22,
     gravity: "none",
-    timerSeconds: 88,
+    timerSeconds: 90,
     tileTypeCount: 7,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "T##..T..##",
-        "TTTTTTTTTT",
-        "TT##TT##TT",
-        "TTTTTTTTTT",
-        "T##..T..##",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "T##..T",
+        "TT##TT",
+        "TTTTTT",
+        "T..##T",
+        "TTTTTT",
+        "TT##TT",
+        "T##..T",
+        "TT##TT",
+        "TTTTTT",
       ],
       7
     ),
@@ -354,17 +391,21 @@ export const LEVELS: LevelDef[] = [
   {
     id: 23,
     gravity: "down",
-    timerSeconds: 86,
+    timerSeconds: 88,
     tileTypeCount: 7,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "TT##TT##TT",
-        "TT....TTTT",
-        "TT##TT##TT",
-        "TTTTTTTTTT",
-        "TT##TT##TT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "TT..TT",
+        "T####T",
+        "TTTTTT",
+        "TT##TT",
+        "TT..TT",
+        "T####T",
+        "TTTTTT",
+        "TT##TT",
+        "TTTTTT",
       ],
       7
     ),
@@ -372,17 +413,21 @@ export const LEVELS: LevelDef[] = [
   {
     id: 24,
     gravity: "left",
-    timerSeconds: 84,
+    timerSeconds: 86,
     tileTypeCount: 7,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "T##TTTT##T",
-        "T##TTTT##T",
-        "TT..TT..TT",
-        "T##TTTT##T",
-        "T##TTTT##T",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "T##TTT",
+        "T##TTT",
+        "TT..TT",
+        "TT##TT",
+        "TTTTTT",
+        "TT##TT",
+        "TT..TT",
+        "TTT##T",
+        "TTT##T",
+        "TTTTTT",
       ],
       7
     ),
@@ -390,40 +435,48 @@ export const LEVELS: LevelDef[] = [
   {
     id: 25,
     gravity: "none",
-    timerSeconds: 82,
+    timerSeconds: 84,
     tileTypeCount: 7,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "TT######TT",
-        "TTT....TTT",
-        "TT######TT",
-        "TTTTTTTTTT",
-        "TT######TT",
-        "TTT....TTT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "T####T",
+        "TT..TT",
+        "TT##TT",
+        "TTTTTT",
+        "T####T",
+        "TT..TT",
+        "TT##TT",
+        "TTTTTT",
+        "T####T",
+        "TT..TT",
+        "TTTTTT",
       ],
       7
     ),
   },
 
-  // 26-30: gravity + frozen + solid + jumper kombinasyonlari
+  // 26-30: gravity + frozen + solid + jumper combos
   {
     id: 26,
     gravity: "down",
-    timerSeconds: 84,
+    timerSeconds: 86,
     tileTypeCount: 7,
     jumpingBlockerCount: 1,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "TT##TT##TT",
-        "TT**TT**TT",
-        "TT..TT..TT",
-        "TTTTTTTTTT",
-        "TT##TT##TT",
-        "TT..TT..TT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "TT##TT",
+        "TT**TT",
+        "TT..TT",
+        "TTTTTT",
+        "TTJ.TT",
+        "TTTTTT",
+        "TT..TT",
+        "TT**TT",
+        "TT##TT",
+        "TTTTTT",
+        "TTTTTT",
       ],
       7
     ),
@@ -431,19 +484,23 @@ export const LEVELS: LevelDef[] = [
   {
     id: 27,
     gravity: "left",
-    timerSeconds: 82,
+    timerSeconds: 84,
     tileTypeCount: 7,
     jumpingBlockerCount: 2,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "T##TTTT##T",
-        "T**TTTT**T",
-        "TT..##..TT",
-        "TTTTTTTTTT",
-        "TT..##..TT",
-        "T**TTTT**T",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "T##TTT",
+        "T**TTT",
+        "TT..TT",
+        "TTJ.TT",
+        "TTTTTT",
+        "TT..TT",
+        "T**TTT",
+        "T##TTT",
+        "TT..TT",
+        "TTTTTT",
+        "TTTTTT",
       ],
       7
     ),
@@ -451,19 +508,23 @@ export const LEVELS: LevelDef[] = [
   {
     id: 28,
     gravity: "up",
-    timerSeconds: 80,
+    timerSeconds: 82,
     tileTypeCount: 8,
     jumpingBlockerCount: 3,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "TT###TT###",
-        "TT**..**TT",
-        "TTTTTTTTTT",
-        "TT..####TT",
-        "TTTTTTTTTT",
-        "TT**..**TT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "TT###T",
+        "TT**TT",
+        "T..J.T",
+        "TT##TT",
+        "TTTTTT",
+        "TT##TT",
+        "T..J.T",
+        "TT**TT",
+        "TT###T",
+        "TTTTTT",
+        "TTTTTT",
       ],
       8
     ),
@@ -471,19 +532,23 @@ export const LEVELS: LevelDef[] = [
   {
     id: 29,
     gravity: "right",
-    timerSeconds: 78,
+    timerSeconds: 80,
     tileTypeCount: 8,
     jumpingBlockerCount: 4,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "T###TTTT#T",
-        "TT**TT**TT",
-        "TT..TT..TT",
-        "TT##TT##TT",
-        "TT..TT..TT",
-        "TT**TT**TT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "T###TT",
+        "TT**TT",
+        "TT..TT",
+        "TTJ#TT",
+        "TTTTTT",
+        "TTJ#TT",
+        "TT..TT",
+        "TT**TT",
+        "T###TT",
+        "TTTTTT",
+        "TTTTTT",
       ],
       8
     ),
@@ -491,19 +556,23 @@ export const LEVELS: LevelDef[] = [
   {
     id: 30,
     gravity: "down",
-    timerSeconds: 84,
+    timerSeconds: 86,
     tileTypeCount: 8,
     jumpingBlockerCount: 3,
     ...patternToLevel(
       [
-        "TTTTTTTTTT",
-        "T#TTTTTT#T",
-        "TT*TTTT*TT",
-        "TT..TT..TT",
-        "TT#TTTT#TT",
-        "TT..TT..TT",
-        "TTTTTTTTTT",
-        "TTTTTTTTTT",
+        "TTTTTT",
+        "T#TT#T",
+        "TT*JTT",
+        "TT..TT",
+        "TT##TT",
+        "TTTTTT",
+        "TT##TT",
+        "TT..TT",
+        "TTJ*TT",
+        "T#TT#T",
+        "TTTTTT",
+        "TTTTTT",
       ],
       8
     ),
@@ -513,6 +582,3 @@ export const LEVELS: LevelDef[] = [
 if (LEVELS.length !== 30) {
   throw new Error(`Expected 30 levels, got ${LEVELS.length}.`);
 }
-
-
-

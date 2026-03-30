@@ -22,10 +22,21 @@ export function calculateLayout(
   const isMobile =
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   const layoutPadding = isMobile ? Math.max(8, BOARD_PADDING - 6) : BOARD_PADDING;
-  const topReserved = isMobile ? Math.max(20, Math.floor(HUD_HEIGHT * 0.4)) : HUD_HEIGHT;
+  const topReserved = isMobile ? Math.max(68, HUD_HEIGHT + 8) : HUD_HEIGHT;
   const availW = displayW - layoutPadding * 2;
   const availH = displayH - topReserved - layoutPadding * 2;
-  const rawCellSize = Math.min(availW / boardW, availH / boardH);
+  const boardArea = boardW * boardH;
+  const baseCell = Math.min(availW / boardW, availH / boardH);
+
+  // Mobile: shrink cells progressively as tile count grows.
+  // 6x4 (24 cells) keeps original size; larger boards are scaled down smoothly.
+  let densityScale = 1;
+  if (isMobile) {
+    const overflowCells = Math.max(0, boardArea - 24);
+    densityScale = Math.max(0.76, 1 - overflowCells * 0.0085);
+  }
+
+  const rawCellSize = baseCell * densityScale;
   const cellSize = Math.max(1, Math.floor(rawCellSize));
   const totalW = cellSize * boardW;
   const totalH = cellSize * boardH;
@@ -48,7 +59,9 @@ export function drawBoard(
   selectedTile: Coord | null,
   activePath: TilePath | null,
   pathAlpha = 1,
-  resolveTileImage?: TileImageResolver
+  resolveTileImage?: TileImageResolver,
+  jumpingBlockerImage?: CanvasImageSource | null,
+  frozenOverlayImage?: CanvasImageSource | null
 ): void {
   const { offsetX, offsetY, cellSize } = layout;
 
@@ -83,7 +96,7 @@ export function drawBoard(
 
       if (cell.kind === CellKind.FrozenTile && cell.tileType !== null) {
         drawTileSprite(ctx, cell.tileType, cx, cy, radius, size, resolveTileImage);
-        drawFrozenOverlay(ctx, x, y, size);
+        drawFrozenOverlay(ctx, x, y, size, frozenOverlayImage ?? null);
       }
 
       if (cell.kind === CellKind.SolidBlocker) {
@@ -91,7 +104,7 @@ export function drawBoard(
       }
 
       if (cell.kind === CellKind.JumpingBlocker) {
-        drawJumpingBlocker(ctx, cx, cy, radius);
+        drawJumpingBlocker(ctx, cx, cy, radius, size, jumpingBlockerImage ?? null);
       }
     }
   }
@@ -361,7 +374,32 @@ function star(
   ctx.closePath();
 }
 
-function drawFrozenOverlay(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+function drawFrozenOverlay(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  overlayImage: CanvasImageSource | null
+): void {
+  if (overlayImage) {
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    drawTileImage(ctx, overlayImage, x + size / 2, y + size / 2, size * 0.94, size * 0.94);
+
+    ctx.globalAlpha = 0.24;
+    ctx.fillStyle = "#90ccff";
+    roundRect(ctx, x + 1, y + 1, size - 2, size - 2, 6);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = "rgba(196, 232, 255, 0.92)";
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, x, y, size, size, 6);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
   ctx.fillStyle = "rgba(100, 180, 255, 0.35)";
   roundRect(ctx, x, y, size, size, 6);
   ctx.fill();
@@ -413,7 +451,26 @@ function drawSolidBlocker(ctx: CanvasRenderingContext2D, x: number, y: number, s
   ctx.stroke();
 }
 
-function drawJumpingBlocker(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number): void {
+function drawJumpingBlocker(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  size: number,
+  monkeyImage: CanvasImageSource | null
+): void {
+  if (monkeyImage) {
+    drawTileImage(ctx, monkeyImage, cx, cy, size * 0.9, size * 0.9);
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.34)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(6, size * 0.43), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
   const r = radius * 1.1;
 
   ctx.fillStyle = "#e67e22";

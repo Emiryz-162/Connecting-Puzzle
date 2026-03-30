@@ -8,6 +8,11 @@
   />
   <title>Connect Puzzle</title>
   <style>
+    :root {
+      --bg-top: #0f1f3d;
+      --bg-bottom: #081226;
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -19,11 +24,15 @@
       height: 100%;
       overflow: hidden;
       overscroll-behavior: none;
-      background: #1a1a2e;
+      background:
+        radial-gradient(circle at 16% 14%, rgba(88, 190, 255, 0.2), transparent 38%),
+        radial-gradient(circle at 86% 78%, rgba(246, 196, 69, 0.12), transparent 40%),
+        linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
       touch-action: none;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
       -webkit-user-select: none;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
 
     #game-root,
@@ -35,9 +44,11 @@
       height: 100vh;
       z-index: 0;
       touch-action: none;
+      transform: translateZ(0);
+      backface-visibility: hidden;
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-Dy-jzWry.js"></script>
+  <script type="module" crossorigin src="./assets/index-Cf2xzBQg.js"></script>
 </head>
 <body>
   <div id="game-root"></div>

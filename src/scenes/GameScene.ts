@@ -29,7 +29,13 @@ import { ResultOverlay } from "../ui/result-overlay";
 import { HintFeedbackOverlay } from "../ui/hint-feedback-overlay";
 import { AudioManager, GAME_SOUNDS } from "../audio/audio-manager";
 import { submitOasizScore, triggerOasizHaptic } from "../platform/oasiz";
-import { PLANET_TILE_THEME, getPlanetTileTextureKey } from "../themes/planet-theme";
+import {
+  ALL_TILE_THEME_DEFINITIONS,
+  TileThemeId,
+  getTextureKeyForThemeTile,
+  getThemeForLevel,
+} from "../themes/tile-themes";
+import { SPECIAL_TEXTURE_KEYS } from "../themes/special-assets";
 import {
   BG_COLOR,
   PATH_DISPLAY_DURATION,
@@ -38,6 +44,7 @@ import {
 
 // Test helper: change this to start directly from a specific level id (1..30).
 const START_LEVEL_ID_FOR_TESTING = 1;
+const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
 
 export class GameScene extends Phaser.Scene {
   public static readonly SCENE_KEY = "GameScene";
@@ -56,11 +63,15 @@ export class GameScene extends Phaser.Scene {
   private displayHeight = 0;
   private renderPixelRatio = 1;
   private readonly tileImagesByTextureKey = new Map<string, CanvasImageSource>();
+  private activeTheme: TileThemeId = "foods";
+  private monkeyImage: CanvasImageSource | null = null;
+  private iceOverlayImage: CanvasImageSource | null = null;
+  private foodsBackgroundImage: CanvasImageSource | null = null;
 
   private gameState!: GameState;
   private layout!: BoardLayout;
 
-  private progression = new LevelProgression(LEVELS, START_LEVEL_ID_FOR_TESTING);
+  private progression = new LevelProgression(LEVELS, START_LEVEL_ID);
   private campaignCompleted = false;
   private runScore = 0;
   private runScoreSubmitted = false;
@@ -147,7 +158,7 @@ export class GameScene extends Phaser.Scene {
     this.hudOverlay = new HudOverlay();
     this.resultOverlay = new ResultOverlay();
     this.hintFeedbackOverlay = new HintFeedbackOverlay();
-    this.hydratePlanetTileImages();
+    this.hydrateThemeTileImages();
 
     this.handleResize();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
@@ -233,12 +244,16 @@ export class GameScene extends Phaser.Scene {
     this.resultOverlay?.destroy();
     this.hintFeedbackOverlay?.destroy();
     this.tileImagesByTextureKey.clear();
+    this.monkeyImage = null;
+    this.iceOverlayImage = null;
+    this.foodsBackgroundImage = null;
     if (this.renderCanvas) {
       this.renderCanvas.remove();
     }
   }
 
   private initLevel(def: LevelDef, preserveRunScore: boolean): void {
+    this.activeTheme = getThemeForLevel(def.id);
     const board = this.createPlayableBoard(def);
 
     if (!preserveRunScore) {
@@ -385,22 +400,42 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private hydratePlanetTileImages(): void {
+  private hydrateThemeTileImages(): void {
     this.tileImagesByTextureKey.clear();
-    for (const textureKey of PLANET_TILE_THEME.tileTextureKeys) {
-      if (!this.textures.exists(textureKey)) {
-        continue;
+    for (const theme of ALL_TILE_THEME_DEFINITIONS) {
+      for (const textureKey of theme.tileTextureKeys) {
+        if (!this.textures.exists(textureKey)) {
+          continue;
+        }
+        const texture = this.textures.get(textureKey);
+        const sourceImage = texture.getSourceImage() as CanvasImageSource | null;
+        if (sourceImage) {
+          this.tileImagesByTextureKey.set(textureKey, sourceImage);
+        }
       }
-      const texture = this.textures.get(textureKey);
-      const sourceImage = texture.getSourceImage() as CanvasImageSource | null;
-      if (sourceImage) {
-        this.tileImagesByTextureKey.set(textureKey, sourceImage);
-      }
+    }
+
+    this.monkeyImage = null;
+    this.iceOverlayImage = null;
+    this.foodsBackgroundImage = null;
+
+    if (this.textures.exists(SPECIAL_TEXTURE_KEYS.monkey)) {
+      const monkeyTexture = this.textures.get(SPECIAL_TEXTURE_KEYS.monkey);
+      this.monkeyImage = (monkeyTexture.getSourceImage() as CanvasImageSource | null) ?? null;
+    }
+    if (this.textures.exists(SPECIAL_TEXTURE_KEYS.iceOverlay)) {
+      const iceTexture = this.textures.get(SPECIAL_TEXTURE_KEYS.iceOverlay);
+      this.iceOverlayImage = (iceTexture.getSourceImage() as CanvasImageSource | null) ?? null;
+    }
+    if (this.textures.exists(SPECIAL_TEXTURE_KEYS.foodsBackground)) {
+      const foodsBackgroundTexture = this.textures.get(SPECIAL_TEXTURE_KEYS.foodsBackground);
+      this.foodsBackgroundImage =
+        (foodsBackgroundTexture.getSourceImage() as CanvasImageSource | null) ?? null;
     }
   }
 
   private resolveTileImage = (tileType: number): CanvasImageSource | null => {
-    const textureKey = getPlanetTileTextureKey(tileType);
+    const textureKey = getTextureKeyForThemeTile(this.activeTheme, tileType);
     return this.tileImagesByTextureKey.get(textureKey) ?? null;
   };
 
@@ -741,8 +776,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     ctx.setTransform(this.renderPixelRatio, 0, 0, this.renderPixelRatio, 0, 0);
-    ctx.fillStyle = BG_COLOR;
-    ctx.fillRect(0, 0, w, h);
+    this.drawSceneBackground(ctx, w, h);
 
     drawBoard(
       ctx,
@@ -751,7 +785,9 @@ export class GameScene extends Phaser.Scene {
       this.gameState.selectedTile,
       pathToDraw,
       pathAlpha,
-      this.resolveTileImage
+      this.resolveTileImage,
+      this.monkeyImage,
+      this.iceOverlayImage
     );
     this.drawKeyboardCursor(ctx);
     this.hintButton.setDisabled(
@@ -779,6 +815,62 @@ export class GameScene extends Phaser.Scene {
       this.drawNoMovesWarning(ctx, w, h);
     }
     this.updateResultOverlay();
+  }
+
+  private drawSceneBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    const image = this.activeTheme === "foods" ? this.foodsBackgroundImage : null;
+    if (!image) {
+      ctx.fillStyle = BG_COLOR;
+      ctx.fillRect(0, 0, width, height);
+      return;
+    }
+
+    const imageSize = this.getCanvasImageSize(image);
+    if (!imageSize) {
+      ctx.fillStyle = BG_COLOR;
+      ctx.fillRect(0, 0, width, height);
+      return;
+    }
+
+    const scale = Math.max(width / imageSize.width, height / imageSize.height);
+    const drawWidth = imageSize.width * scale;
+    const drawHeight = imageSize.height * scale;
+    const drawX = (width - drawWidth) / 2;
+    const drawY = (height - drawHeight) / 2;
+
+    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+    // Keep gameplay readability over a textured background.
+    ctx.fillStyle = "rgba(5, 12, 30, 0.42)";
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  private getCanvasImageSize(image: CanvasImageSource): { width: number; height: number } | null {
+    const candidate = image as {
+      width?: number;
+      height?: number;
+      videoWidth?: number;
+      videoHeight?: number;
+    };
+
+    const width =
+      typeof candidate.videoWidth === "number" && candidate.videoWidth > 0
+        ? candidate.videoWidth
+        : typeof candidate.width === "number" && candidate.width > 0
+          ? candidate.width
+          : 0;
+    const height =
+      typeof candidate.videoHeight === "number" && candidate.videoHeight > 0
+        ? candidate.videoHeight
+        : typeof candidate.height === "number" && candidate.height > 0
+          ? candidate.height
+          : 0;
+
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
+
+    return { width, height };
   }
 
   private updateHudOverlay(): void {
@@ -1178,6 +1270,3 @@ export class GameScene extends Phaser.Scene {
     }
   };
 }
-
-
-
