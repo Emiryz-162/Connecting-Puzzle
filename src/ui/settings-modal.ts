@@ -1,0 +1,288 @@
+﻿import { Settings } from "../types";
+
+type SettingsKey = keyof Settings;
+type OnSettingsChange = (settings: Settings) => void;
+type OnOpenChange = (isOpen: boolean) => void;
+
+interface ToggleDef {
+  key: SettingsKey;
+  title: string;
+  description: string;
+}
+
+const TOGGLES: ToggleDef[] = [
+  {
+    key: "musicEnabled",
+    title: "Music",
+    description: "Background music switch (state only).",
+  },
+  {
+    key: "fxEnabled",
+    title: "FX",
+    description: "Sound effects switch (state only).",
+  },
+  {
+    key: "hapticsEnabled",
+    title: "Haptics",
+    description: "Vibration feedback for supported devices.",
+  },
+];
+
+function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>): void {
+  Object.assign(element.style, style);
+}
+
+export class SettingsModal {
+  private settings: Settings;
+  private readonly onSettingsChange: OnSettingsChange;
+  private readonly onOpenChange: OnOpenChange;
+
+  private readonly button: HTMLButtonElement;
+  private readonly backdrop: HTMLDivElement;
+  private readonly panel: HTMLDivElement;
+  private readonly closeButton: HTMLButtonElement;
+  private readonly toggles: Record<SettingsKey, HTMLInputElement>;
+
+  private isOpen = false;
+
+  constructor(initialSettings: Settings, onSettingsChange: OnSettingsChange, onOpenChange: OnOpenChange) {
+    this.settings = { ...initialSettings };
+    this.onSettingsChange = onSettingsChange;
+    this.onOpenChange = onOpenChange;
+
+    this.toggles = {
+      musicEnabled: document.createElement("input"),
+      fxEnabled: document.createElement("input"),
+      hapticsEnabled: document.createElement("input"),
+    };
+
+    this.button = document.createElement("button");
+    this.button.type = "button";
+    this.button.textContent = "Settings";
+    this.button.setAttribute("aria-label", "Open settings");
+    this.button.setAttribute("aria-haspopup", "dialog");
+    applyStyles(this.button, {
+      position: "fixed",
+      top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+      right: "calc(env(safe-area-inset-right, 0px) + 12px)",
+      zIndex: "40",
+      border: "1px solid rgba(255,255,255,0.25)",
+      background: "rgba(15, 52, 96, 0.95)",
+      color: "#ffffff",
+      borderRadius: "999px",
+      fontFamily: "system-ui, sans-serif",
+      fontWeight: "600",
+      fontSize: "13px",
+      lineHeight: "1",
+      padding: "10px 14px",
+      cursor: "pointer",
+      touchAction: "manipulation",
+      minHeight: "40px",
+    });
+
+    this.backdrop = document.createElement("div");
+    applyStyles(this.backdrop, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "60",
+      display: "none",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "rgba(0, 0, 0, 0.58)",
+      paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
+      paddingRight: "calc(env(safe-area-inset-right, 0px) + 12px)",
+      paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+      paddingLeft: "calc(env(safe-area-inset-left, 0px) + 12px)",
+      pointerEvents: "none",
+    });
+
+    this.panel = document.createElement("div");
+    this.panel.setAttribute("role", "dialog");
+    this.panel.setAttribute("aria-modal", "true");
+    this.panel.setAttribute("aria-label", "Settings");
+    applyStyles(this.panel, {
+      width: "min(360px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)))",
+      maxHeight: "calc(100vh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))",
+      overflowY: "auto",
+      borderRadius: "14px",
+      background: "#16213e",
+      border: "1px solid rgba(255,255,255,0.18)",
+      boxShadow: "0 12px 30px rgba(0, 0, 0, 0.35)",
+      color: "#ffffff",
+      padding: "16px",
+      fontFamily: "system-ui, sans-serif",
+    });
+
+    const header = document.createElement("div");
+    applyStyles(header, {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: "12px",
+      gap: "8px",
+    });
+
+    const title = document.createElement("h2");
+    title.textContent = "Settings";
+    applyStyles(title, {
+      margin: "0",
+      fontSize: "20px",
+      fontWeight: "700",
+    });
+
+    this.closeButton = document.createElement("button");
+    this.closeButton.type = "button";
+    this.closeButton.textContent = "Close";
+    this.closeButton.setAttribute("aria-label", "Close settings");
+    applyStyles(this.closeButton, {
+      border: "1px solid rgba(255,255,255,0.2)",
+      borderRadius: "8px",
+      background: "rgba(255, 255, 255, 0.1)",
+      color: "#ffffff",
+      fontSize: "13px",
+      fontWeight: "600",
+      padding: "7px 10px",
+      cursor: "pointer",
+      touchAction: "manipulation",
+      minHeight: "34px",
+    });
+
+    header.append(title, this.closeButton);
+    this.panel.appendChild(header);
+
+    for (const def of TOGGLES) {
+      this.panel.appendChild(this.createToggleRow(def));
+    }
+
+    this.backdrop.appendChild(this.panel);
+    document.body.append(this.button, this.backdrop);
+
+    this.syncToggleInputs(this.settings);
+
+    this.button.addEventListener("click", this.handleOpenClick);
+    this.closeButton.addEventListener("click", this.handleCloseClick);
+    this.backdrop.addEventListener("click", this.handleBackdropClick);
+    document.addEventListener("keydown", this.handleEscKey);
+  }
+
+  setSettings(next: Settings): void {
+    this.settings = { ...next };
+    this.syncToggleInputs(this.settings);
+  }
+
+  destroy(): void {
+    this.button.removeEventListener("click", this.handleOpenClick);
+    this.closeButton.removeEventListener("click", this.handleCloseClick);
+    this.backdrop.removeEventListener("click", this.handleBackdropClick);
+    document.removeEventListener("keydown", this.handleEscKey);
+
+    this.button.remove();
+    this.backdrop.remove();
+  }
+
+  private createToggleRow(def: ToggleDef): HTMLLabelElement {
+    const row = document.createElement("label");
+    row.setAttribute("for", `settings-${def.key}`);
+    applyStyles(row, {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "12px",
+      borderRadius: "10px",
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.1)",
+      padding: "12px",
+      marginBottom: "10px",
+      cursor: "pointer",
+    });
+
+    const textWrap = document.createElement("div");
+
+    const title = document.createElement("div");
+    title.textContent = def.title;
+    applyStyles(title, {
+      fontSize: "15px",
+      fontWeight: "600",
+      marginBottom: "3px",
+    });
+
+    const desc = document.createElement("div");
+    desc.textContent = def.description;
+    applyStyles(desc, {
+      fontSize: "12px",
+      color: "rgba(255,255,255,0.72)",
+      lineHeight: "1.35",
+    });
+
+    textWrap.append(title, desc);
+
+    const input = this.toggles[def.key];
+    input.type = "checkbox";
+    input.id = `settings-${def.key}`;
+    input.setAttribute("aria-label", def.title);
+    applyStyles(input, {
+      width: "20px",
+      height: "20px",
+      margin: "0",
+      cursor: "pointer",
+      accentColor: "#4caf50",
+      flexShrink: "0",
+    });
+
+    input.addEventListener("change", () => {
+      this.settings = { ...this.settings, [def.key]: input.checked };
+      this.onSettingsChange({ ...this.settings });
+    });
+
+    row.append(textWrap, input);
+    return row;
+  }
+
+  private syncToggleInputs(settings: Settings): void {
+    this.toggles.musicEnabled.checked = settings.musicEnabled;
+    this.toggles.fxEnabled.checked = settings.fxEnabled;
+    this.toggles.hapticsEnabled.checked = settings.hapticsEnabled;
+  }
+
+  private open(): void {
+    if (this.isOpen) {
+      return;
+    }
+
+    this.isOpen = true;
+    this.backdrop.style.display = "flex";
+    this.backdrop.style.pointerEvents = "auto";
+    this.onOpenChange(true);
+  }
+
+  private close(): void {
+    if (!this.isOpen) {
+      return;
+    }
+
+    this.isOpen = false;
+    this.backdrop.style.display = "none";
+    this.backdrop.style.pointerEvents = "none";
+    this.onOpenChange(false);
+  }
+
+  private handleOpenClick = (): void => {
+    this.open();
+  };
+
+  private handleCloseClick = (): void => {
+    this.close();
+  };
+
+  private handleBackdropClick = (event: MouseEvent): void => {
+    if (event.target === this.backdrop) {
+      this.close();
+    }
+  };
+
+  private handleEscKey = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") {
+      this.close();
+    }
+  };
+}

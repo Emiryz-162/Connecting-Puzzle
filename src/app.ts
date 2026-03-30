@@ -1,7 +1,16 @@
 ﻿// app.ts
 // Main orchestration: loop, state transitions, match pipeline, HUD and overlays.
 
-import { BoardLayout, BoardState, CellKind, Coord, GameState, LevelDef, TilePath } from "./types";
+import {
+  BoardLayout,
+  BoardState,
+  CellKind,
+  Coord,
+  GameState,
+  LevelDef,
+  Settings,
+  TilePath,
+} from "./types";
 import { createBoard, countRemainingTiles, removeTiles, reshuffleBoardTiles } from "./game/board";
 import { findPath, hasAnyValidPair } from "./game/pathfinder";
 import { resolveGravity } from "./game/gravity";
@@ -11,6 +20,9 @@ import { calculateLayout, drawBoard } from "./render/board-renderer";
 import { InputHandler } from "./input/input-handler";
 import { LEVELS } from "./levels/level-data";
 import { LevelProgression } from "./levels/progression";
+import { SettingsStore } from "./settings/store";
+import { SettingsModal } from "./ui/settings-modal";
+import { submitOasizScore, triggerOasizHaptic } from "./platform/oasiz";
 import {
   BG_COLOR,
   HUD_TEXT_COLOR,
@@ -40,6 +52,10 @@ export class App {
   private campaignCompleted = false;
   private runScore = 0;
   private runScoreSubmitted = false;
+  private settingsStore: SettingsStore;
+  private settingsModal: SettingsModal;
+  private settings: Settings;
+  private settingsOpen = false;
 
   // Path animation state.
   private activePath: TilePath | null = null;
@@ -56,6 +72,18 @@ export class App {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
+    this.settingsStore = new SettingsStore();
+    this.settings = this.settingsStore.get();
+    this.settingsModal = new SettingsModal(
+      this.settings,
+      (next) => {
+        this.settings = this.settingsStore.set(next);
+        this.settingsModal.setSettings(this.settings);
+      },
+      (isOpen) => {
+        this.settingsOpen = isOpen;
+      }
+    );
 
     this.handleResize();
     window.addEventListener("resize", () => this.handleResize());
@@ -208,6 +236,7 @@ export class App {
   };
 
   private update(dt: number): void {
+    if (this.settingsOpen) return;
     if (this.gameState.phase !== "playing") return;
 
     this.gameState.timerRemaining -= dt;
@@ -231,6 +260,10 @@ export class App {
   }
 
   private handleTap(coord: Coord, boardWidth: number, boardHeight: number): void {
+    if (this.settingsOpen) {
+      return;
+    }
+
     if (this.gameState.phase === "won") {
       if (this.campaignCompleted) {
         this.restartCampaign();
@@ -349,24 +382,12 @@ export class App {
 
   /** Haptic hook (Oasiz). */
   private triggerHaptic(pattern: string): void {
-    try {
-      if (typeof (window as any).triggerHaptic === "function") {
-        (window as any).triggerHaptic(pattern);
-      }
-    } catch {
-      // no-op
-    }
+    triggerOasizHaptic(pattern, this.settings.hapticsEnabled);
   }
 
   /** Score hook (Oasiz). */
   private submitScore(score: number): void {
-    try {
-      if (typeof (window as any).submitScore === "function") {
-        (window as any).submitScore(score);
-      }
-    } catch {
-      // no-op
-    }
+    submitOasizScore(score);
   }
 
   /** Run sonunda skoru bir kez submit eder. */
