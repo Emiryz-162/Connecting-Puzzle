@@ -153,22 +153,45 @@ const SOUND_CONFIG: Record<GameSoundName, SoundConfig> = {
   },
 };
 
+const GAMEPLAY_MUSIC_SRC = "/assets/music/gameplay_loop.mp3";
+const GAMEPLAY_MUSIC_VOLUME = 0.2;
+const MUSIC_FADE_IN_MS = 420;
+const MUSIC_FADE_OUT_MS = 280;
+
 export class AudioManager {
   private fxEnabled: boolean;
+  private musicEnabled: boolean;
+
   private unlocked = false;
   private unlockHandlersBound = false;
+  private warnedMusicPlayFailure = false;
 
   private readonly audioBySound = new Map<GameSoundName, HTMLAudioElement>();
   private readonly lastPlayedAt = new Map<GameSoundName, number>();
 
-  constructor(fxEnabled: boolean) {
+  private readonly musicAudio: HTMLAudioElement;
+  private musicFadeRafId: number | null = null;
+
+  constructor(fxEnabled: boolean, musicEnabled: boolean) {
     this.fxEnabled = fxEnabled;
+    this.musicEnabled = musicEnabled;
+
+    this.musicAudio = new Audio(GAMEPLAY_MUSIC_SRC);
+    this.musicAudio.preload = "auto";
+    this.musicAudio.loop = true;
+    this.musicAudio.volume = 0;
+
     this.preloadAll();
     this.bindUnlockHandlers();
   }
 
   setFxEnabled(enabled: boolean): void {
     this.fxEnabled = enabled;
+  }
+
+  setMusicEnabled(enabled: boolean): void {
+    this.musicEnabled = enabled;
+    this.syncMusicState();
   }
 
   play(sound: GameSoundName): void {
@@ -216,6 +239,7 @@ export class AudioManager {
       const audio = this.createAudio(sound);
       audio.load();
     }
+    this.musicAudio.load();
   }
 
   private createAudio(sound: GameSoundName): HTMLAudioElement {
@@ -246,6 +270,7 @@ export class AudioManager {
       }
       this.unlocked = true;
       this.primePlayback();
+      this.syncMusicState();
       for (const eventName of events) {
         window.removeEventListener(eventName, unlock);
       }
@@ -253,6 +278,91 @@ export class AudioManager {
 
     for (const eventName of events) {
       window.addEventListener(eventName, unlock, { passive: true });
+    }
+  }
+
+  private syncMusicState(): void {
+    if (!this.unlocked) {
+      return;
+    }
+
+    if (this.musicEnabled) {
+      this.fadeInMusic();
+    } else {
+      this.fadeOutMusic();
+    }
+  }
+
+  private fadeInMusic(): void {
+    this.cancelMusicFade();
+
+    if (this.musicAudio.ended || this.musicAudio.currentTime < 0) {
+      this.musicAudio.currentTime = 0;
+    }
+
+    const playPromise = this.musicAudio.play();
+    if (playPromise && typeof playPromise.then === "function") {
+      playPromise
+        .then(() => {
+          this.warnedMusicPlayFailure = false;
+          this.animateMusicVolume(this.musicAudio.volume, GAMEPLAY_MUSIC_VOLUME, MUSIC_FADE_IN_MS);
+        })
+        .catch((err) => {
+          if (!this.warnedMusicPlayFailure) {
+            this.warnedMusicPlayFailure = true;
+            console.warn("[Audio] Background music could not start yet.", err);
+          }
+        });
+      return;
+    }
+
+    this.animateMusicVolume(this.musicAudio.volume, GAMEPLAY_MUSIC_VOLUME, MUSIC_FADE_IN_MS);
+  }
+
+  private fadeOutMusic(): void {
+    this.cancelMusicFade();
+    this.animateMusicVolume(this.musicAudio.volume, 0, MUSIC_FADE_OUT_MS, () => {
+      this.musicAudio.pause();
+    });
+  }
+
+  private animateMusicVolume(
+    from: number,
+    to: number,
+    durationMs: number,
+    onDone?: () => void
+  ): void {
+    const startAt = performance.now();
+
+    if (durationMs <= 0) {
+      this.musicAudio.volume = this.clamp01(to);
+      onDone?.();
+      return;
+    }
+
+    const step = (now: number): void => {
+      const elapsed = now - startAt;
+      const t = Math.min(1, elapsed / durationMs);
+      const eased = 1 - (1 - t) * (1 - t);
+      const volume = from + (to - from) * eased;
+      this.musicAudio.volume = this.clamp01(volume);
+
+      if (t >= 1) {
+        this.musicFadeRafId = null;
+        onDone?.();
+        return;
+      }
+
+      this.musicFadeRafId = requestAnimationFrame(step);
+    };
+
+    this.musicFadeRafId = requestAnimationFrame(step);
+  }
+
+  private cancelMusicFade(): void {
+    if (this.musicFadeRafId !== null) {
+      cancelAnimationFrame(this.musicFadeRafId);
+      this.musicFadeRafId = null;
     }
   }
 
@@ -281,5 +391,11 @@ export class AudioManager {
     }
 
     sample.muted = wasMuted;
+  }
+
+  private clamp01(v: number): number {
+    if (v < 0) return 0;
+    if (v > 1) return 1;
+    return v;
   }
 }

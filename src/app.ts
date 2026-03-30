@@ -96,7 +96,7 @@ export class App {
     this.ctx = canvas.getContext("2d")!;
     this.settingsStore = new SettingsStore();
     this.settings = this.settingsStore.get();
-    this.audio = new AudioManager(this.settings.fxEnabled);
+    this.audio = new AudioManager(this.settings.fxEnabled, this.settings.musicEnabled);
     this.settingsModal = new SettingsModal(
       this.settings,
       (next) => {
@@ -110,6 +110,7 @@ export class App {
         }
         this.settings = this.settingsStore.set(next);
         this.audio.setFxEnabled(this.settings.fxEnabled);
+        this.audio.setMusicEnabled(this.settings.musicEnabled);
         this.settingsModal.setSettings(this.settings);
       },
       (isOpen) => {
