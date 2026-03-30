@@ -1,13 +1,8 @@
-// ── main.ts ──
-// Uygulama giriş noktası.
-// Canvas elementini alır ve App'i başlatır.
+﻿import { createPhaserGame } from "./game/phaser-game";
 
-import { App } from "./app";
-
-const canvas = document.getElementById("game") as HTMLCanvasElement;
-if (!canvas) {
-  throw new Error("Canvas element #game bulunamadı!");
+const root = document.getElementById("game-root");
+if (!root) {
+  throw new Error("Root element #game-root bulunamadi!");
 }
 
-// App'i başlat — tüm oyun mantığı ve render buradan yönetilir
-new App(canvas);
+createPhaserGame(root);

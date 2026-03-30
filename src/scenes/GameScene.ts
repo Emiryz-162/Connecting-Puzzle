@@ -1,4 +1,5 @@
-﻿// app.ts
+﻿import Phaser from "phaser";
+// app.ts
 // Main orchestration: loop, state transitions, match pipeline, HUD and overlays.
 
 import {
@@ -10,22 +11,21 @@ import {
   LevelDef,
   Settings,
   TilePath,
-} from "./types";
-import { createBoard, countRemainingTiles, removeTiles, reshuffleBoardTiles } from "./game/board";
-import { findPath, hasAnyValidPair } from "./game/pathfinder";
-import { resolveGravity } from "./game/gravity";
-import { unfreezeNeighbors } from "./game/frozen";
-import { moveJumpingBlockers } from "./game/jumper";
-import { calculateLayout, drawBoard } from "./render/board-renderer";
-import { InputHandler } from "./input/input-handler";
-import { LEVELS } from "./levels/level-data";
-import { LevelProgression } from "./levels/progression";
-import { SettingsStore } from "./settings/store";
-import { SettingsModal } from "./ui/settings-modal";
-import { HintButton } from "./ui/hint-button";
-import { StartScreen } from "./ui/start-screen";
-import { AudioManager, GAME_SOUNDS } from "./audio/audio-manager";
-import { submitOasizScore, triggerOasizHaptic } from "./platform/oasiz";
+} from "../types";
+import { createBoard, countRemainingTiles, removeTiles, reshuffleBoardTiles } from "../game/board";
+import { findPath, hasAnyValidPair } from "../game/pathfinder";
+import { resolveGravity } from "../game/gravity";
+import { unfreezeNeighbors } from "../game/frozen";
+import { moveJumpingBlockers } from "../game/jumper";
+import { calculateLayout, drawBoard } from "../render/board-renderer";
+import { LEVELS } from "../levels/level-data";
+import { LevelProgression } from "../levels/progression";
+import { SettingsStore } from "../settings/store";
+import { SettingsModal } from "../ui/settings-modal";
+import { HintButton } from "../ui/hint-button";
+import { StartScreen } from "../ui/start-screen";
+import { AudioManager, GAME_SOUNDS } from "../audio/audio-manager";
+import { submitOasizScore, triggerOasizHaptic } from "../platform/oasiz";
 import {
   BG_COLOR,
   HUD_TEXT_COLOR,
@@ -35,12 +35,13 @@ import {
   TIMER_FILL_COLOR,
   TIMER_LOW_COLOR,
   OVERLAY_BG,
-} from "./constants";
+} from "../constants";
 
 // Test helper: change this to start directly from a specific level id (1..30).
-const START_LEVEL_ID_FOR_TESTING = 30;
+const START_LEVEL_ID_FOR_TESTING = 1;
 
-export class App {
+export class GameScene extends Phaser.Scene {
+  public static readonly SCENE_KEY = "GameScene";
   private static readonly MAX_INIT_BUILD_ATTEMPTS = 12;
   private static readonly MAX_RESHUFFLE_ATTEMPTS = 24;
   private static readonly HINT_DISPLAY_DURATION_MS = 1400;
@@ -49,27 +50,27 @@ export class App {
   private static readonly OVERLAY_INTRO_DURATION_S = 0.24;
   private static readonly MATCH_CHAIN_WINDOW_MS = 1300;
   private static readonly TIME_LOW_WARNING_SECONDS = 10;
+  private static readonly RENDER_TEXTURE_KEY = "main-surface";
 
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private renderTexture!: Phaser.Textures.CanvasTexture;
+  private renderImage!: Phaser.GameObjects.Image;
+  private ctx!: CanvasRenderingContext2D;
   private displayWidth = 0;
   private displayHeight = 0;
 
   private gameState!: GameState;
   private layout!: BoardLayout;
-  private inputHandler!: InputHandler;
-  private lastTimestamp = 0;
 
   private progression = new LevelProgression(LEVELS, START_LEVEL_ID_FOR_TESTING);
   private campaignCompleted = false;
   private runScore = 0;
   private runScoreSubmitted = false;
-  private settingsStore: SettingsStore;
-  private settingsModal: SettingsModal;
-  private hintButton: HintButton;
-  private startScreen: StartScreen;
-  private audio: AudioManager;
-  private settings: Settings;
+  private settingsStore!: SettingsStore;
+  private settingsModal!: SettingsModal;
+  private hintButton!: HintButton;
+  private startScreen!: StartScreen;
+  private audio!: AudioManager;
+  private settings!: Settings;
   private settingsOpen = false;
 
   // Path animation state.
@@ -95,12 +96,13 @@ export class App {
   private overlayIntroTimer = 0;
   private timeLowWarningPlayed = false;
   private lastSuccessfulMatchAtMs = 0;
-  private readonly onResize = (): void => this.handleResize();
   private keyboardCursor: Coord | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext("2d")!;
+  constructor() {
+    super(GameScene.SCENE_KEY);
+  }
+
+  create(): void {
     this.settingsStore = new SettingsStore();
     this.settings = this.settingsStore.get();
     this.audio = new AudioManager(this.settings.fxEnabled, this.settings.musicEnabled);
@@ -122,9 +124,7 @@ export class App {
       },
       (isOpen) => {
         this.settingsOpen = isOpen;
-        if (this.inputHandler) {
-          this.inputHandler.setEnabled(!isOpen && !this.startScreen.isVisible());
-        }
+        this.setSceneInputEnabled(!isOpen && !this.startScreen.isVisible());
         if (isOpen && this.gameState) {
           this.gameState.selectedTile = null;
         }
@@ -144,18 +144,88 @@ export class App {
     this.startScreen = new StartScreen(() => this.handleStartScreenPlay());
 
     this.handleResize();
-    window.addEventListener("resize", this.onResize);
-    window.visualViewport?.addEventListener("resize", this.onResize);
-    window.visualViewport?.addEventListener("scroll", this.onResize);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, this.handlePointerDown, this);
     window.addEventListener("keydown", this.handleKeyDown);
 
     this.initLevel(this.progression.getCurrentLevel(), false);
     this.pauseForStartScreen();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
+  }
 
-    requestAnimationFrame((t) => {
-      this.lastTimestamp = t;
-      this.loop(t);
-    });
+  override update(_time: number, delta: number): void {
+    if (!this.gameState || !this.ctx) {
+      return;
+    }
+    this.updateState(Math.min(delta / 1000, 0.1));
+    this.renderFrame();
+  }
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer): void {
+    const nativeEvent = pointer.event;
+    if (nativeEvent instanceof MouseEvent && nativeEvent.button !== 0) {
+      return;
+    }
+    if (!this.gameState || !this.layout) {
+      return;
+    }
+    const boardWidth = this.gameState.board.width;
+    const boardHeight = this.gameState.board.height;
+    const col = Math.floor((pointer.x - this.layout.offsetX) / this.layout.cellSize);
+    const row = Math.floor((pointer.y - this.layout.offsetY) / this.layout.cellSize);
+    this.handleTap({ col, row }, boardWidth, boardHeight);
+  }
+
+  private setSceneInputEnabled(enabled: boolean): void {
+    this.input.enabled = enabled;
+    if (this.input.keyboard) {
+      this.input.keyboard.enabled = enabled;
+    }
+  }
+
+  private createRenderSurface(): void {
+    if (this.renderTexture) {
+      this.renderTexture.setSize(Math.max(1, this.displayWidth), Math.max(1, this.displayHeight));
+      this.ctx = this.renderTexture.getContext();
+      if (this.renderImage) {
+        this.renderImage.setDisplaySize(this.displayWidth, this.displayHeight);
+      }
+      return;
+    }
+
+    const texture = this.textures.createCanvas(
+      GameScene.RENDER_TEXTURE_KEY,
+      Math.max(1, this.displayWidth),
+      Math.max(1, this.displayHeight)
+    );
+    if (!texture) {
+      throw new Error("Phaser canvas texture olusturulamadi.");
+    }
+    this.renderTexture = texture;
+    this.ctx = this.renderTexture.getContext();
+
+    if (this.renderImage) {
+      this.renderImage.destroy();
+    }
+    this.renderImage = this.add.image(0, 0, GameScene.RENDER_TEXTURE_KEY).setOrigin(0, 0);
+    this.renderImage.setDisplaySize(this.displayWidth, this.displayHeight);
+    this.renderImage.setDepth(0);
+  }
+
+  private handleShutdown(): void {
+    this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+    this.input.off(Phaser.Input.Events.POINTER_DOWN, this.handlePointerDown, this);
+    window.removeEventListener("keydown", this.handleKeyDown);
+    this.audio?.destroy();
+    this.settingsModal?.destroy();
+    this.hintButton?.destroy();
+    this.startScreen?.destroy();
+    if (this.renderImage) {
+      this.renderImage.destroy();
+    }
+    if (this.textures.exists(GameScene.RENDER_TEXTURE_KEY)) {
+      this.textures.remove(GameScene.RENDER_TEXTURE_KEY);
+    }
   }
 
   private initLevel(def: LevelDef, preserveRunScore: boolean): void {
@@ -204,23 +274,11 @@ export class App {
     }
 
     this.recalculateLayout();
-
-    if (this.inputHandler) {
-      this.inputHandler.destroy();
-    }
-    this.inputHandler = new InputHandler(
-      this.canvas,
-      (coord, bw, bh) => this.handleTap(coord, bw, bh),
-      this.layout,
-      board.width,
-      board.height
-    );
-    this.inputHandler.setEnabled(!this.settingsOpen && !this.startScreen.isVisible());
   }
 
   /** Build a board and guarantee at least one valid move at start. */
   private createPlayableBoard(def: LevelDef): BoardState {
-    for (let i = 0; i < App.MAX_INIT_BUILD_ATTEMPTS; i++) {
+    for (let i = 0; i < GameScene.MAX_INIT_BUILD_ATTEMPTS; i++) {
       const board = createBoard(def);
       if (this.ensureBoardHasValidMove(board, false)) {
         return board;
@@ -236,7 +294,7 @@ export class App {
     }
 
     let reshuffledAtLeastOnce = false;
-    for (let i = 0; i < App.MAX_RESHUFFLE_ATTEMPTS; i++) {
+    for (let i = 0; i < GameScene.MAX_RESHUFFLE_ATTEMPTS; i++) {
       const changed = reshuffleBoardTiles(board);
       if (!changed) {
         return false;
@@ -277,16 +335,9 @@ export class App {
   }
 
   private handleResize(): void {
-    const dpr = window.devicePixelRatio || 1;
-    const viewport = window.visualViewport;
-    this.displayWidth = Math.round(viewport?.width ?? window.innerWidth);
-    this.displayHeight = Math.round(viewport?.height ?? window.innerHeight);
-
-    this.canvas.width = this.displayWidth * dpr;
-    this.canvas.height = this.displayHeight * dpr;
-    this.canvas.style.width = `${this.displayWidth}px`;
-    this.canvas.style.height = `${this.displayHeight}px`;
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.displayWidth = Math.max(1, Math.round(this.scale.gameSize.width));
+    this.displayHeight = Math.max(1, Math.round(this.scale.gameSize.height));
+    this.createRenderSurface();
 
     if (this.gameState) {
       this.recalculateLayout();
@@ -301,29 +352,12 @@ export class App {
       this.gameState.board.height
     );
 
-    if (this.inputHandler) {
-      this.inputHandler.updateLayout(
-        this.layout,
-        this.gameState.board.width,
-        this.gameState.board.height
-      );
-    }
   }
 
-  private loop = (timestamp: number): void => {
-    const dt = Math.min((timestamp - this.lastTimestamp) / 1000, 0.1);
-    this.lastTimestamp = timestamp;
-
-    this.update(dt);
-    this.render();
-
-    requestAnimationFrame(this.loop);
-  };
-
-  private update(dt: number): void {
+  private updateState(dt: number): void {
     if (this.previousPhase !== this.gameState.phase) {
       const isOverlayPhase = this.gameState.phase === "won" || this.gameState.phase === "lost";
-      this.overlayIntroTimer = isOverlayPhase ? App.OVERLAY_INTRO_DURATION_S : 0;
+      this.overlayIntroTimer = isOverlayPhase ? GameScene.OVERLAY_INTRO_DURATION_S : 0;
       this.previousPhase = this.gameState.phase;
     }
 
@@ -354,12 +388,13 @@ export class App {
 
     if (this.settingsOpen) return;
     if (this.gameState.phase !== "playing") return;
+    if (this.noMovesWarning) return;
 
     this.gameState.timerRemaining -= dt;
     if (
       !this.timeLowWarningPlayed &&
       this.gameState.timerRemaining > 0 &&
-      this.gameState.timerRemaining <= App.TIME_LOW_WARNING_SECONDS
+      this.gameState.timerRemaining <= GameScene.TIME_LOW_WARNING_SECONDS
     ) {
       this.timeLowWarningPlayed = true;
       this.audio.play(GAME_SOUNDS.TIME_LOW_WARNING);
@@ -497,8 +532,8 @@ export class App {
     }
 
     this.hintPath = path;
-    this.hintPathTimerMs = App.HINT_DISPLAY_DURATION_MS;
-    this.showHintFeedback("Hint highlighted.", App.HINT_FEEDBACK_DURATION_S);
+    this.hintPathTimerMs = GameScene.HINT_DISPLAY_DURATION_MS;
+    this.showHintFeedback("Hint highlighted.", GameScene.HINT_FEEDBACK_DURATION_S);
     this.audio.play(GAME_SOUNDS.HINT_REVEAL);
     this.triggerHaptic("light");
   }
@@ -555,7 +590,7 @@ export class App {
     const nowMs = Date.now();
     const isChainMatch =
       this.lastSuccessfulMatchAtMs > 0 &&
-      nowMs - this.lastSuccessfulMatchAtMs <= App.MATCH_CHAIN_WINDOW_MS;
+      nowMs - this.lastSuccessfulMatchAtMs <= GameScene.MATCH_CHAIN_WINDOW_MS;
     this.audio.play(GAME_SOUNDS.TILE_MATCH_SUCCESS);
     this.lastSuccessfulMatchAtMs = nowMs;
     this.runScore += 100;
@@ -630,7 +665,7 @@ export class App {
     this.lastWinRewardText = null;
     this.audio.play(GAME_SOUNDS.XP_GAIN);
 
-    const expectedUnlocked = Math.floor(this.runXp / App.PHOTO_REWARD_XP_STEP);
+    const expectedUnlocked = Math.floor(this.runXp / GameScene.PHOTO_REWARD_XP_STEP);
     if (expectedUnlocked > this.photoRewardsUnlocked) {
       this.photoRewardsUnlocked = expectedUnlocked;
       this.lastWinRewardText = `Photo Reward ${this.photoRewardsUnlocked} unlocked`;
@@ -639,10 +674,10 @@ export class App {
   }
 
   private getXpProgressInStep(): number {
-    return this.runXp % App.PHOTO_REWARD_XP_STEP;
+    return this.runXp % GameScene.PHOTO_REWARD_XP_STEP;
   }
 
-  private render(): void {
+  private renderFrame(): void {
     const ctx = this.ctx;
     const w = this.displayWidth;
     const h = this.displayHeight;
@@ -685,6 +720,7 @@ export class App {
     if (this.gameState.phase === "won" || this.gameState.phase === "lost") {
       this.drawOverlay(ctx, w, h);
     }
+    this.renderTexture.refresh();
   }
 
   private drawHUD(ctx: CanvasRenderingContext2D, w: number): void {
@@ -727,7 +763,7 @@ export class App {
 
     const xpBarY = barY + 18;
     const xpBarH = 6;
-    const xpProgress = this.getXpProgressInStep() / App.PHOTO_REWARD_XP_STEP;
+    const xpProgress = this.getXpProgressInStep() / GameScene.PHOTO_REWARD_XP_STEP;
 
     ctx.fillStyle = "rgba(255,255,255,0.14)";
     this.drawRoundBar(ctx, barX, xpBarY, barW, xpBarH, 4);
@@ -742,14 +778,14 @@ export class App {
     ctx.fillStyle = "rgba(255,255,255,0.78)";
     ctx.font = "11px system-ui, sans-serif";
     ctx.fillText(
-      `XP ${this.getXpProgressInStep()}/${App.PHOTO_REWARD_XP_STEP} • Rewards ${this.photoRewardsUnlocked}`,
+      `XP ${this.getXpProgressInStep()}/${GameScene.PHOTO_REWARD_XP_STEP} • Rewards ${this.photoRewardsUnlocked}`,
       w / 2,
       xpBarY + xpBarH + 8
     );
   }
 
   private drawHintFeedback(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-    const alpha = Math.min(1, this.hintFeedbackTimer / App.HINT_FEEDBACK_DURATION_S);
+    const alpha = Math.min(1, this.hintFeedbackTimer / GameScene.HINT_FEEDBACK_DURATION_S);
     const boxW = Math.min(260, w - 32);
     const boxH = 34;
     const x = (w - boxW) / 2;
@@ -856,7 +892,7 @@ export class App {
     ctx.fillRect(0, 0, w, h);
 
     const introRatio = this.overlayIntroTimer > 0
-      ? this.overlayIntroTimer / App.OVERLAY_INTRO_DURATION_S
+      ? this.overlayIntroTimer / GameScene.OVERLAY_INTRO_DURATION_S
       : 0;
     const scale = 1 - introRatio * 0.08;
 
@@ -910,7 +946,7 @@ export class App {
       const progressY = cardY + 176;
       const progressW = cardW - 60;
       const progressH = 9;
-      const progressRatio = this.getXpProgressInStep() / App.PHOTO_REWARD_XP_STEP;
+      const progressRatio = this.getXpProgressInStep() / GameScene.PHOTO_REWARD_XP_STEP;
 
       ctx.fillStyle = "rgba(255,255,255,0.16)";
       this.drawRoundBar(ctx, progressX, progressY, progressW, progressH, 5);
@@ -925,7 +961,7 @@ export class App {
       ctx.fillStyle = "rgba(255,255,255,0.78)";
       ctx.font = "500 13px system-ui, sans-serif";
       ctx.fillText(
-        `XP ${this.getXpProgressInStep()}/${App.PHOTO_REWARD_XP_STEP} • Rewards ${this.photoRewardsUnlocked}`,
+        `XP ${this.getXpProgressInStep()}/${GameScene.PHOTO_REWARD_XP_STEP} • Rewards ${this.photoRewardsUnlocked}`,
         w / 2,
         progressY + 20
       );
@@ -987,9 +1023,7 @@ export class App {
     this.gameState.phase = "paused";
     this.gameState.selectedTile = null;
     this.startScreen.show();
-    if (this.inputHandler) {
-      this.inputHandler.setEnabled(false);
-    }
+    this.setSceneInputEnabled(false);
   }
 
   private handleStartScreenPlay(): void {
@@ -1002,7 +1036,7 @@ export class App {
     if (this.gameState.phase === "paused") {
       this.gameState.phase = "playing";
     }
-    this.inputHandler?.setEnabled(!this.settingsOpen);
+    this.setSceneInputEnabled(!this.settingsOpen);
     this.triggerHaptic("light");
   }
 
@@ -1044,6 +1078,13 @@ export class App {
 
     const board = this.gameState.board;
     const cursor = this.keyboardCursor ?? this.findInitialKeyboardCursor(board);
+    if (this.noMovesWarning) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.handleTap(cursor, board.width, board.height);
+      }
+      return;
+    }
     let nextCol = cursor.col;
     let nextRow = cursor.row;
     let handledMove = false;
@@ -1088,3 +1129,6 @@ export class App {
     }
   };
 }
+
+
+

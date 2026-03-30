@@ -185,6 +185,7 @@ export class AudioManager {
 
   private unlocked = false;
   private unlockHandlersBound = false;
+  private unlockHandler: (() => void) | null = null;
   private warnedMusicPlayFailure = false;
   private warnedFxFallback = false;
 
@@ -199,6 +200,7 @@ export class AudioManager {
 
   private readonly musicAudio: HTMLAudioElement;
   private musicFadeRafId: number | null = null;
+  private isDestroyed = false;
 
   constructor(fxEnabled: boolean, musicEnabled: boolean) {
     this.fxEnabled = fxEnabled;
@@ -216,19 +218,60 @@ export class AudioManager {
   }
 
   setFxEnabled(enabled: boolean): void {
+    if (this.isDestroyed) {
+      return;
+    }
     this.fxEnabled = enabled;
   }
 
   setMusicEnabled(enabled: boolean): void {
+    if (this.isDestroyed) {
+      return;
+    }
     this.musicEnabled = enabled;
     this.syncMusicState();
   }
 
   play(sound: GameSoundName): void {
+    if (this.isDestroyed) {
+      return;
+    }
     if (!this.fxEnabled) {
       return;
     }
     this.playInternal(sound);
+  }
+
+  destroy(): void {
+    if (this.isDestroyed) {
+      return;
+    }
+    this.isDestroyed = true;
+
+    this.removeUnlockHandlers();
+    this.cancelMusicFade();
+    this.musicAudio.pause();
+    this.musicAudio.currentTime = 0;
+
+    for (const sourceSet of this.activeFxSourcesBySound.values()) {
+      for (const source of sourceSet) {
+        try {
+          source.stop();
+        } catch {
+          // no-op
+        }
+      }
+    }
+    this.activeFxSourcesBySound.clear();
+
+    if (this.audioContext && this.audioContext.state !== "closed") {
+      const closePromise = this.audioContext.close();
+      if (closePromise && typeof closePromise.catch === "function") {
+        closePromise.catch(() => {
+          // no-op
+        });
+      }
+    }
   }
 
   private playInternal(sound: GameSoundName): void {
@@ -432,11 +475,9 @@ export class AudioManager {
       this.resumeAudioContext();
       this.primePlayback();
       this.syncMusicState();
-
-      for (const eventName of events) {
-        window.removeEventListener(eventName, unlock, true);
-      }
+      this.removeUnlockHandlers();
     };
+    this.unlockHandler = unlock;
 
     for (const eventName of events) {
       window.addEventListener(eventName, unlock, {
@@ -444,6 +485,18 @@ export class AudioManager {
         passive: true,
       });
     }
+  }
+
+  private removeUnlockHandlers(): void {
+    if (!this.unlockHandlersBound || !this.unlockHandler || typeof window === "undefined") {
+      return;
+    }
+    const events: Array<keyof WindowEventMap> = ["pointerdown", "touchstart", "mousedown", "keydown"];
+    for (const eventName of events) {
+      window.removeEventListener(eventName, this.unlockHandler, true);
+    }
+    this.unlockHandler = null;
+    this.unlockHandlersBound = false;
   }
 
   private resumeAudioContext(): void {
