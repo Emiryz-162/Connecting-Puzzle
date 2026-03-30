@@ -14,6 +14,13 @@ const TILE_IMAGE_FIT_RATIO = 0.92;
 const TILE_GLITCH_IMAGE_ALPHA = 0.88;
 const TRANSPARENT_TILE_CACHE = new WeakMap<CanvasImageSource, HTMLCanvasElement>();
 
+export interface MergePullRenderItem {
+  from: Coord;
+  to: Coord;
+  tileType: TileTypeId;
+  progress: number; // 0..1
+}
+
 export function calculateLayout(
   displayW: number,
   displayH: number,
@@ -62,7 +69,8 @@ export function drawBoard(
   pathAlpha = 1,
   resolveTileImage?: TileImageResolver,
   jumpingBlockerImage?: CanvasImageSource | null,
-  frozenOverlayImage?: CanvasImageSource | null
+  frozenOverlayImage?: CanvasImageSource | null,
+  mergePullItems?: MergePullRenderItem[]
 ): void {
   const { offsetX, offsetY, cellSize } = layout;
 
@@ -123,6 +131,10 @@ export function drawBoard(
 
   if (activePath && activePath.length >= 2) {
     drawPath(ctx, activePath, layout, pathAlpha);
+  }
+
+  if (mergePullItems && mergePullItems.length > 0) {
+    drawMergePullEffects(ctx, layout, cellSize, mergePullItems, resolveTileImage);
   }
 }
 
@@ -209,6 +221,125 @@ function drawPath(
     ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+function drawMergePullEffects(
+  ctx: CanvasRenderingContext2D,
+  layout: BoardLayout,
+  cellSize: number,
+  items: MergePullRenderItem[],
+  resolveTileImage?: TileImageResolver
+): void {
+  for (const item of items) {
+    const t = clamp01(item.progress);
+    if (t <= 0 || t >= 1) {
+      continue;
+    }
+
+    const eased = easeInCubic(t);
+    const fromCenter = coordToPixel(item.from, layout);
+    const toCenter = coordToPixel(item.to, layout);
+    const midX = (fromCenter.x + toCenter.x) * 0.5;
+    const midY = (fromCenter.y + toCenter.y) * 0.5;
+
+    const p1 = {
+      x: lerp(fromCenter.x, midX, eased),
+      y: lerp(fromCenter.y, midY, eased),
+    };
+    const p2 = {
+      x: lerp(toCenter.x, midX, eased),
+      y: lerp(toCenter.y, midY, eased),
+    };
+
+    const alpha = 1 - t * 0.78;
+    drawPullArrow(ctx, p1.x, p1.y, midX, midY, alpha);
+    drawPullArrow(ctx, p2.x, p2.y, midX, midY, alpha);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    drawTileSprite(
+      ctx,
+      item.tileType,
+      p1.x,
+      p1.y,
+      cellSize * 0.32,
+      cellSize,
+      resolveTileImage,
+      item.from.row,
+      item.from.col
+    );
+    drawTileSprite(
+      ctx,
+      item.tileType,
+      p2.x,
+      p2.y,
+      cellSize * 0.32,
+      cellSize,
+      resolveTileImage,
+      item.to.row,
+      item.to.col
+    );
+    ctx.restore();
+
+    if (t > 0.84) {
+      const burst = (t - 0.84) / 0.16;
+      const r = Math.max(2, cellSize * 0.06 + burst * cellSize * 0.11);
+      ctx.save();
+      ctx.globalAlpha = (1 - burst) * 0.5;
+      ctx.fillStyle = "rgba(255, 225, 180, 0.85)";
+      ctx.beginPath();
+      ctx.arc(midX, midY, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+function drawPullArrow(
+  ctx: CanvasRenderingContext2D,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  alpha: number
+): void {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const len = Math.hypot(dx, dy);
+  if (len < 8) {
+    return;
+  }
+
+  const ux = dx / len;
+  const uy = dy / len;
+  const tipX = toX - ux * 2;
+  const tipY = toY - uy * 2;
+  const baseX = fromX + ux * Math.min(22, len * 0.45);
+  const baseY = fromY + uy * Math.min(22, len * 0.45);
+
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.9;
+  ctx.strokeStyle = "rgba(255, 206, 110, 0.95)";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(baseX, baseY);
+  ctx.lineTo(tipX, tipY);
+  ctx.stroke();
+
+  const head = Math.min(8, len * 0.16);
+  const leftX = tipX - ux * head - uy * head * 0.55;
+  const leftY = tipY - uy * head + ux * head * 0.55;
+  const rightX = tipX - ux * head + uy * head * 0.55;
+  const rightY = tipY - uy * head - ux * head * 0.55;
+  ctx.fillStyle = "rgba(255, 206, 110, 0.98)";
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(leftX, leftY);
+  ctx.lineTo(rightX, rightY);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -490,35 +621,89 @@ function prepareTransparentTileImage(image: CanvasImageSource): CanvasImageSourc
   ctx.drawImage(image, 0, 0, size.width, size.height);
   const imageData = ctx.getImageData(0, 0, size.width, size.height);
   const d = imageData.data;
+  const original = new Uint8ClampedArray(d);
 
-  for (let i = 0; i < d.length; i += 4) {
-    const r = d[i];
-    const g = d[i + 1];
-    const b = d[i + 2];
-    const a = d[i + 3];
-    if (a === 0) {
-      continue;
+  // IMPORTANT:
+  // Remove only panel-blue pixels connected to the image border.
+  // This preserves blue details inside the icon (planets/gems/etc).
+  const w = size.width;
+  const h = size.height;
+  const visited = new Uint8Array(w * h);
+  const queue = new Int32Array(w * h);
+  let head = 0;
+  let tail = 0;
+
+  const tryEnqueue = (x: number, y: number): void => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return;
+    const idx = y * w + x;
+    if (visited[idx] === 1) return;
+    const p = idx * 4;
+    if (!isLikelyPanelBlue(d[p], d[p + 1], d[p + 2], d[p + 3])) return;
+    visited[idx] = 1;
+    queue[tail++] = idx;
+  };
+
+  for (let x = 0; x < w; x++) {
+    tryEnqueue(x, 0);
+    tryEnqueue(x, h - 1);
+  }
+  for (let y = 1; y < h - 1; y++) {
+    tryEnqueue(0, y);
+    tryEnqueue(w - 1, y);
+  }
+
+  while (head < tail) {
+    const idx = queue[head++];
+    const x = idx % w;
+    const y = (idx / w) | 0;
+    tryEnqueue(x - 1, y);
+    tryEnqueue(x + 1, y);
+    tryEnqueue(x, y - 1);
+    tryEnqueue(x, y + 1);
+  }
+
+  let totalOpaque = 0;
+  let affectedOpaque = 0;
+  for (let idx = 0; idx < visited.length; idx++) {
+    const p = idx * 4;
+    if (original[p + 3] > 8) {
+      totalOpaque++;
+      if (visited[idx] === 1) {
+        affectedOpaque++;
+      }
     }
+  }
+  const affectedRatio = totalOpaque > 0 ? affectedOpaque / totalOpaque : 0;
 
+  // If the cleanup would wipe most of the icon, use a much softer pass.
+  // This protects assets whose foreground itself is blue-ish (e.g. some planets).
+  const destructiveCleanup = affectedRatio > 0.72;
+
+  for (let idx = 0; idx < visited.length; idx++) {
+    if (visited[idx] !== 1) continue;
+    const p = idx * 4;
+    const r = d[p];
+    const g = d[p + 1];
+    const b = d[p + 2];
+    const a = d[p + 3];
     const maxRG = Math.max(r, g);
-    const blueDominant = b > maxRG * 1.18;
-    const likelyPanelBlue =
-      blueDominant &&
-      b > 58 &&
-      r < 155 &&
-      g < 175 &&
-      (b - maxRG) > 16;
-
-    if (likelyPanelBlue) {
-      const strength = Math.min(1, (b - maxRG) / 120 + (130 - Math.min(130, r)) / 220);
-      const targetAlpha = a * (0.06 + (1 - strength) * 0.16);
-      d[i + 3] = Math.max(0, Math.min(255, Math.round(targetAlpha)));
-    }
+    const strength = Math.min(1, (b - maxRG) / 120 + (130 - Math.min(130, r)) / 220);
+    const targetAlpha = destructiveCleanup
+      ? a * (0.55 + (1 - strength) * 0.16)
+      : a * (0.05 + (1 - strength) * 0.12);
+    d[p + 3] = Math.max(0, Math.min(255, Math.round(targetAlpha)));
   }
 
   ctx.putImageData(imageData, 0, 0);
   TRANSPARENT_TILE_CACHE.set(image, canvas);
   return canvas;
+}
+
+function isLikelyPanelBlue(r: number, g: number, b: number, a: number): boolean {
+  if (a <= 0) return false;
+  const maxRG = Math.max(r, g);
+  const blueDominant = b > maxRG * 1.18;
+  return blueDominant && b > 58 && r < 170 && g < 185 && (b - maxRG) > 14;
 }
 
 function drawTileImage(
@@ -755,4 +940,16 @@ function roundRect(
 function stableNoise(seed: number): number {
   const v = Math.sin(seed * 12.9898) * 43758.5453123;
   return v - Math.floor(v);
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function easeInCubic(t: number): number {
+  return t * t * t;
 }

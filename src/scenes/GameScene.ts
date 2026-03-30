@@ -17,7 +17,7 @@ import { findPath, hasAnyValidPair } from "../game/pathfinder";
 import { resolveGravity } from "../game/gravity";
 import { unfreezeNeighbors } from "../game/frozen";
 import { moveJumpingBlockers } from "../game/jumper";
-import { calculateLayout, drawBoard } from "../render/board-renderer";
+import { MergePullRenderItem, calculateLayout, drawBoard } from "../render/board-renderer";
 import { LEVELS } from "../levels/level-data";
 import { LevelProgression } from "../levels/progression";
 import { SettingsStore } from "../settings/store";
@@ -43,8 +43,16 @@ import {
 } from "../constants";
 
 // Test helper: change this to start directly from a specific level id (1..30).
-const START_LEVEL_ID_FOR_TESTING = 1;
+const START_LEVEL_ID_FOR_TESTING = 28;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
+
+interface MergePullAnimation {
+  from: Coord;
+  to: Coord;
+  tileType: number;
+  elapsedMs: number;
+  durationMs: number;
+}
 
 export class GameScene extends Phaser.Scene {
   public static readonly SCENE_KEY = "GameScene";
@@ -56,6 +64,8 @@ export class GameScene extends Phaser.Scene {
   private static readonly OVERLAY_INTRO_DURATION_S = 0.24;
   private static readonly MATCH_CHAIN_WINDOW_MS = 1300;
   private static readonly TIME_LOW_WARNING_SECONDS = 10;
+  private static readonly MERGE_PULL_DURATION_MS = 170;
+  private static readonly MAX_MERGE_PULL_ANIMATIONS = 10;
 
   private renderCanvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
@@ -112,6 +122,7 @@ export class GameScene extends Phaser.Scene {
   private timeLowWarningPlayed = false;
   private lastSuccessfulMatchAtMs = 0;
   private keyboardCursor: Coord | null = null;
+  private mergePullAnimations: MergePullAnimation[] = [];
 
   constructor() {
     super(GameScene.SCENE_KEY);
@@ -225,7 +236,6 @@ export class GameScene extends Phaser.Scene {
 
     const context = this.renderCanvas.getContext("2d", {
       alpha: false,
-      desynchronized: true,
     });
     if (!context) {
       throw new Error("Render canvas context olusturulamadi.");
@@ -246,6 +256,7 @@ export class GameScene extends Phaser.Scene {
     this.resultOverlay?.destroy();
     this.hintFeedbackOverlay?.destroy();
     this.tileImagesByTextureKey.clear();
+    this.mergePullAnimations = [];
     this.monkeyImage = null;
     this.iceOverlayImage = null;
     this.foodsBackgroundImage = null;
@@ -295,6 +306,7 @@ export class GameScene extends Phaser.Scene {
     this.noMovesWarning = false;
     this.activePath = null;
     this.pendingRemoval = null;
+    this.mergePullAnimations = [];
 
     if (def.tutorialText) {
       this.tutorialText = def.tutorialText;
@@ -456,6 +468,13 @@ export class GameScene extends Phaser.Scene {
   };
 
   private updateState(dt: number): void {
+    if (this.mergePullAnimations.length > 0) {
+      const deltaMs = dt * 1000;
+      this.mergePullAnimations = this.mergePullAnimations
+        .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
+        .filter((anim) => anim.elapsedMs < anim.durationMs);
+    }
+
     if (this.previousPhase !== this.gameState.phase) {
       const isOverlayPhase = this.gameState.phase === "won" || this.gameState.phase === "lost";
       this.overlayIntroTimer = isOverlayPhase ? GameScene.OVERLAY_INTRO_DURATION_S : 0;
@@ -686,6 +705,9 @@ export class GameScene extends Phaser.Scene {
     if (!this.pendingRemoval) return;
 
     const [a, b] = this.pendingRemoval;
+    const matchedType = this.gameState.board.cells[a.row][a.col].tileType;
+    const firstCell = this.gameState.board.cells[a.row][a.col];
+    const secondCell = this.gameState.board.cells[b.row][b.col];
 
     removeTiles(this.gameState.board, a, b);
     const nowMs = Date.now();
@@ -713,6 +735,22 @@ export class GameScene extends Phaser.Scene {
       this.audio.play(GAME_SOUNDS.JUMPER_MOVE);
     }
 
+    // Level 26+ introduces gravity+jumper combos. If board reflows immediately,
+    // merge pull ghosts can visually clash with the new board state and look like flicker.
+    // Show merge-pull only when the board stayed spatially stable this frame.
+    const boardReflowed = gravityMoves.length > 0 || jumperMoves.length > 0;
+    if (
+      !boardReflowed &&
+      matchedType !== null &&
+      firstCell.tileType !== null &&
+      secondCell.tileType !== null &&
+      firstCell.tileType === secondCell.tileType
+    ) {
+      this.startMergePullAnimation(a, b, matchedType);
+    } else if (boardReflowed && this.mergePullAnimations.length > 0) {
+      this.mergePullAnimations = [];
+    }
+
     const remaining = countRemainingTiles(this.gameState.board);
     if (remaining === 0) {
       this.applyLevelWinProgress();
@@ -727,6 +765,9 @@ export class GameScene extends Phaser.Scene {
       }
     } else if (!hasAnyValidPair(this.gameState.board)) {
       const recovered = this.ensureBoardHasValidMove(this.gameState.board, true);
+      if (recovered && this.mergePullAnimations.length > 0) {
+        this.mergePullAnimations = [];
+      }
       this.noMovesWarning = !recovered;
       if (!recovered) {
         this.audio.play(GAME_SOUNDS.NO_MOVES_WARNING);
@@ -739,6 +780,35 @@ export class GameScene extends Phaser.Scene {
     this.hintPath = null;
     this.hintPathTimerMs = 0;
     this.gameState.inputLocked = false;
+  }
+
+  private startMergePullAnimation(a: Coord, b: Coord, tileType: number): void {
+    this.mergePullAnimations.push({
+      from: { ...a },
+      to: { ...b },
+      tileType,
+      elapsedMs: 0,
+      durationMs: GameScene.MERGE_PULL_DURATION_MS,
+    });
+    if (this.mergePullAnimations.length > GameScene.MAX_MERGE_PULL_ANIMATIONS) {
+      this.mergePullAnimations.splice(
+        0,
+        this.mergePullAnimations.length - GameScene.MAX_MERGE_PULL_ANIMATIONS
+      );
+    }
+  }
+
+  private getMergePullRenderItems(): MergePullRenderItem[] {
+    if (this.mergePullAnimations.length === 0) {
+      return [];
+    }
+
+    return this.mergePullAnimations.map((anim) => ({
+      from: anim.from,
+      to: anim.to,
+      tileType: anim.tileType,
+      progress: Math.max(0, Math.min(1, anim.elapsedMs / anim.durationMs)),
+    }));
   }
 
   /** Haptic hook (Oasiz). */
@@ -803,7 +873,8 @@ export class GameScene extends Phaser.Scene {
       pathAlpha,
       this.resolveTileImage,
       this.monkeyImage,
-      this.iceOverlayImage
+      this.iceOverlayImage,
+      this.getMergePullRenderItems()
     );
     this.drawKeyboardCursor(ctx);
     this.hintButton.setDisabled(
