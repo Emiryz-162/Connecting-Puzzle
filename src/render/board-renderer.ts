@@ -19,14 +19,18 @@ export function calculateLayout(
   boardW: number,
   boardH: number
 ): BoardLayout {
-  const availW = displayW - BOARD_PADDING * 2;
-  const availH = displayH - HUD_HEIGHT - BOARD_PADDING * 2;
+  const isMobile =
+    typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const layoutPadding = isMobile ? Math.max(8, BOARD_PADDING - 6) : BOARD_PADDING;
+  const topReserved = isMobile ? Math.max(20, Math.floor(HUD_HEIGHT * 0.4)) : HUD_HEIGHT;
+  const availW = displayW - layoutPadding * 2;
+  const availH = displayH - topReserved - layoutPadding * 2;
   const rawCellSize = Math.min(availW / boardW, availH / boardH);
   const cellSize = Math.max(1, Math.floor(rawCellSize));
   const totalW = cellSize * boardW;
   const totalH = cellSize * boardH;
   const offsetX = Math.round((displayW - totalW) / 2);
-  const offsetY = Math.round(HUD_HEIGHT + BOARD_PADDING + (availH - totalH) / 2);
+  const offsetY = Math.round(topReserved + layoutPadding + (availH - totalH) / 2);
   return { offsetX, offsetY, cellSize };
 }
 

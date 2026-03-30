@@ -1,3 +1,5 @@
+import { getUiMetrics } from "./ui-metrics";
+
 type ResultPhase = "won" | "lost" | "hidden";
 
 interface ResultSnapshot {
@@ -35,9 +37,8 @@ export class ResultOverlay {
   private readonly xpDetail: HTMLDivElement;
   private readonly rewardBadge: HTMLDivElement;
   private readonly actionText: HTMLDivElement;
-  private readonly loseHelper: HTMLDivElement;
-
   private visible = false;
+  private readonly onWindowResize = (): void => this.applyResponsiveStyles();
 
   constructor() {
     this.root = document.createElement("div");
@@ -49,7 +50,7 @@ export class ResultOverlay {
       display: "none",
       alignItems: "center",
       justifyContent: "center",
-      background: "rgba(0, 0, 0, 0.7)",
+      background: "rgba(0, 0, 0, 0.72)",
       paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)",
       paddingRight: "calc(env(safe-area-inset-right, 0px) + 16px)",
       paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
@@ -59,23 +60,20 @@ export class ResultOverlay {
 
     this.card = document.createElement("div");
     applyStyles(this.card, {
-      width: "min(420px, calc(100vw - 32px))",
       borderRadius: "16px",
       background: "rgba(18, 27, 51, 0.98)",
       border: "1px solid rgba(255,255,255,0.16)",
       boxShadow: "0 18px 36px rgba(0,0,0,0.35)",
-      padding: "24px 22px 18px",
       color: "#ffffff",
       fontFamily: "system-ui, sans-serif",
       textAlign: "center",
-      transform: "scale(1)",
-      opacity: "1",
-      transition: "transform 140ms ease-out, opacity 140ms ease-out",
+      transform: "scale(0.96)",
+      opacity: "0",
+      transition: "transform 160ms ease-out, opacity 160ms ease-out",
     });
 
     this.title = document.createElement("div");
     applyStyles(this.title, {
-      fontSize: "34px",
       lineHeight: "1.1",
       fontWeight: "800",
       marginBottom: "8px",
@@ -85,17 +83,15 @@ export class ResultOverlay {
 
     this.subtitle = document.createElement("div");
     applyStyles(this.subtitle, {
-      fontSize: "16px",
       lineHeight: "1.2",
       fontWeight: "500",
       color: "rgba(255,255,255,0.86)",
-      marginBottom: "16px",
+      marginBottom: "14px",
       textRendering: "optimizeLegibility",
     });
 
     this.scoreText = document.createElement("div");
     applyStyles(this.scoreText, {
-      fontSize: "24px",
       lineHeight: "1.1",
       fontWeight: "700",
       marginBottom: "8px",
@@ -104,7 +100,6 @@ export class ResultOverlay {
 
     this.xpGainText = document.createElement("div");
     applyStyles(this.xpGainText, {
-      fontSize: "17px",
       lineHeight: "1.1",
       fontWeight: "700",
       color: "#f6c445",
@@ -114,7 +109,6 @@ export class ResultOverlay {
 
     this.xpTrack = document.createElement("div");
     applyStyles(this.xpTrack, {
-      height: "10px",
       borderRadius: "999px",
       overflow: "hidden",
       background: "rgba(255,255,255,0.16)",
@@ -133,9 +127,8 @@ export class ResultOverlay {
 
     this.xpDetail = document.createElement("div");
     applyStyles(this.xpDetail, {
-      fontSize: "13px",
       lineHeight: "1.2",
-      fontWeight: "500",
+      fontWeight: "600",
       color: "rgba(255,255,255,0.8)",
       marginBottom: "12px",
       fontVariantNumeric: "tabular-nums",
@@ -148,33 +141,22 @@ export class ResultOverlay {
       border: "1px solid rgba(246, 196, 69, 0.9)",
       background: "rgba(246, 196, 69, 0.2)",
       color: "#ffd56c",
-      fontSize: "13px",
       lineHeight: "1.2",
       fontWeight: "700",
-      padding: "7px 10px",
+      padding: "8px 10px",
       marginBottom: "12px",
     });
 
     this.actionText = document.createElement("div");
     applyStyles(this.actionText, {
-      borderRadius: "10px",
+      borderRadius: "12px",
       border: "1px solid rgba(255,255,255,0.28)",
-      background: "rgba(255,255,255,0.12)",
-      fontSize: "14px",
+      background: "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.1))",
       lineHeight: "1.2",
       fontWeight: "700",
-      padding: "8px 10px",
+      padding: "10px 12px",
       color: "#ffffff",
-    });
-
-    this.loseHelper = document.createElement("div");
-    applyStyles(this.loseHelper, {
-      display: "none",
-      fontSize: "16px",
-      lineHeight: "1.2",
-      color: "rgba(255,255,255,0.84)",
-      marginBottom: "12px",
-      fontWeight: "500",
+      textShadow: "0 1px 0 rgba(0,0,0,0.3)",
     });
 
     this.card.append(
@@ -185,12 +167,14 @@ export class ResultOverlay {
       this.xpTrack,
       this.xpDetail,
       this.rewardBadge,
-      this.loseHelper,
       this.actionText
     );
 
     this.root.appendChild(this.card);
     document.body.appendChild(this.root);
+    this.applyResponsiveStyles();
+    window.addEventListener("resize", this.onWindowResize);
+    window.visualViewport?.addEventListener("resize", this.onWindowResize);
   }
 
   update(snapshot: ResultSnapshot): void {
@@ -217,7 +201,7 @@ export class ResultOverlay {
       this.xpDetail.style.display = "block";
       this.xpGainText.textContent = `+${snapshot.lastWinXpGain} XP`;
       this.xpFill.style.width = `${clamp01(snapshot.xpInStep / snapshot.xpStep) * 100}%`;
-      this.xpDetail.textContent = `XP ${snapshot.xpInStep}/${snapshot.xpStep} • Rewards ${snapshot.rewardsUnlocked}`;
+      this.xpDetail.textContent = `XP ${snapshot.xpInStep}/${snapshot.xpStep} | Rewards ${snapshot.rewardsUnlocked}`;
       this.actionText.textContent = action;
 
       if (snapshot.rewardText) {
@@ -226,8 +210,6 @@ export class ResultOverlay {
       } else {
         this.rewardBadge.style.display = "none";
       }
-
-      this.loseHelper.style.display = "none";
       return;
     }
 
@@ -239,12 +221,30 @@ export class ResultOverlay {
     this.xpTrack.style.display = "none";
     this.xpDetail.style.display = "none";
     this.rewardBadge.style.display = "none";
-    this.loseHelper.style.display = "none";
     this.actionText.textContent = "Tap to retry";
   }
 
   destroy(): void {
+    window.removeEventListener("resize", this.onWindowResize);
+    window.visualViewport?.removeEventListener("resize", this.onWindowResize);
     this.root.remove();
+  }
+
+  private applyResponsiveStyles(): void {
+    const metrics = getUiMetrics();
+    applyStyles(this.card, {
+      width: metrics.isMobile ? "min(430px, calc(100vw - 18px))" : "min(420px, calc(100vw - 32px))",
+      padding: metrics.isMobile ? "22px 16px 16px" : "24px 22px 18px",
+    });
+
+    this.title.style.fontSize = metrics.isMobile ? "32px" : "34px";
+    this.subtitle.style.fontSize = metrics.isMobile ? "15px" : "16px";
+    this.scoreText.style.fontSize = metrics.isMobile ? "23px" : "24px";
+    this.xpGainText.style.fontSize = metrics.isMobile ? "17px" : "17px";
+    this.xpTrack.style.height = metrics.isMobile ? "10px" : "10px";
+    this.xpDetail.style.fontSize = metrics.isMobile ? "13px" : "13px";
+    this.rewardBadge.style.fontSize = metrics.isMobile ? "13px" : "13px";
+    this.actionText.style.fontSize = metrics.isMobile ? "15px" : "14px";
   }
 
   private setVisible(nextVisible: boolean): void {
@@ -254,6 +254,15 @@ export class ResultOverlay {
 
     this.visible = nextVisible;
     this.root.style.display = nextVisible ? "flex" : "none";
+
+    if (nextVisible) {
+      this.card.style.opacity = "0";
+      this.card.style.transform = "scale(0.96)";
+      window.requestAnimationFrame(() => {
+        this.card.style.opacity = "1";
+        this.card.style.transform = "scale(1)";
+      });
+    }
   }
 }
 
