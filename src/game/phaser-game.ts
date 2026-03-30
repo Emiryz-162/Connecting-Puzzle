@@ -1,11 +1,14 @@
-﻿import Phaser from "phaser";
+import Phaser from "phaser";
 import { BootScene } from "../scenes/BootScene";
 import { GameScene } from "../scenes/GameScene";
 
 export function createPhaserGame(parent: HTMLElement): Phaser.Game {
-  return new Phaser.Game({
+  const renderResolution = Math.min(window.devicePixelRatio || 1, 3);
+
+  const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     parent,
+    autoRound: true,
     backgroundColor: "#1a1a2e",
     scene: [BootScene, GameScene],
     scale: {
@@ -21,5 +24,8 @@ export function createPhaserGame(parent: HTMLElement): Phaser.Game {
       antialias: true,
       pixelArt: false,
     },
-  });
+  };
+
+  (config as Phaser.Types.Core.GameConfig & { resolution: number }).resolution = renderResolution;
+  return new Phaser.Game(config);
 }

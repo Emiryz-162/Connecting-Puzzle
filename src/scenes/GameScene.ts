@@ -24,16 +24,14 @@ import { SettingsStore } from "../settings/store";
 import { SettingsModal } from "../ui/settings-modal";
 import { HintButton } from "../ui/hint-button";
 import { StartScreen } from "../ui/start-screen";
+import { HudOverlay } from "../ui/hud-overlay";
+import { ResultOverlay } from "../ui/result-overlay";
 import { AudioManager, GAME_SOUNDS } from "../audio/audio-manager";
 import { submitOasizScore, triggerOasizHaptic } from "../platform/oasiz";
+import { PLANET_TILE_THEME, getPlanetTileTextureKey } from "../themes/planet-theme";
 import {
   BG_COLOR,
-  HUD_TEXT_COLOR,
-  BOARD_PADDING,
   PATH_DISPLAY_DURATION,
-  TIMER_BG_COLOR,
-  TIMER_FILL_COLOR,
-  TIMER_LOW_COLOR,
   OVERLAY_BG,
 } from "../constants";
 
@@ -57,6 +55,8 @@ export class GameScene extends Phaser.Scene {
   private ctx!: CanvasRenderingContext2D;
   private displayWidth = 0;
   private displayHeight = 0;
+  private renderPixelRatio = 1;
+  private readonly tileImagesByTextureKey = new Map<string, CanvasImageSource>();
 
   private gameState!: GameState;
   private layout!: BoardLayout;
@@ -69,6 +69,8 @@ export class GameScene extends Phaser.Scene {
   private settingsModal!: SettingsModal;
   private hintButton!: HintButton;
   private startScreen!: StartScreen;
+  private hudOverlay!: HudOverlay;
+  private resultOverlay!: ResultOverlay;
   private audio!: AudioManager;
   private settings!: Settings;
   private settingsOpen = false;
@@ -142,6 +144,9 @@ export class GameScene extends Phaser.Scene {
       this.handleHintRequest();
     });
     this.startScreen = new StartScreen(() => this.handleStartScreenPlay());
+    this.hudOverlay = new HudOverlay();
+    this.resultOverlay = new ResultOverlay();
+    this.hydratePlanetTileImages();
 
     this.handleResize();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
@@ -184,9 +189,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createRenderSurface(): void {
+    const textureWidth = Math.max(1, Math.round(this.displayWidth * this.renderPixelRatio));
+    const textureHeight = Math.max(1, Math.round(this.displayHeight * this.renderPixelRatio));
+
     if (this.renderTexture) {
-      this.renderTexture.setSize(Math.max(1, this.displayWidth), Math.max(1, this.displayHeight));
+      this.renderTexture.setSize(textureWidth, textureHeight);
       this.ctx = this.renderTexture.getContext();
+      this.applyRenderContextQuality();
       if (this.renderImage) {
         this.renderImage.setDisplaySize(this.displayWidth, this.displayHeight);
       }
@@ -195,14 +204,15 @@ export class GameScene extends Phaser.Scene {
 
     const texture = this.textures.createCanvas(
       GameScene.RENDER_TEXTURE_KEY,
-      Math.max(1, this.displayWidth),
-      Math.max(1, this.displayHeight)
+      textureWidth,
+      textureHeight
     );
     if (!texture) {
       throw new Error("Phaser canvas texture olusturulamadi.");
     }
     this.renderTexture = texture;
     this.ctx = this.renderTexture.getContext();
+    this.applyRenderContextQuality();
 
     if (this.renderImage) {
       this.renderImage.destroy();
@@ -220,6 +230,9 @@ export class GameScene extends Phaser.Scene {
     this.settingsModal?.destroy();
     this.hintButton?.destroy();
     this.startScreen?.destroy();
+    this.hudOverlay?.destroy();
+    this.resultOverlay?.destroy();
+    this.tileImagesByTextureKey.clear();
     if (this.renderImage) {
       this.renderImage.destroy();
     }
@@ -337,6 +350,7 @@ export class GameScene extends Phaser.Scene {
   private handleResize(): void {
     this.displayWidth = Math.max(1, Math.round(this.scale.gameSize.width));
     this.displayHeight = Math.max(1, Math.round(this.scale.gameSize.height));
+    this.renderPixelRatio = this.resolveRenderPixelRatio();
     this.createRenderSurface();
 
     if (this.gameState) {
@@ -353,6 +367,45 @@ export class GameScene extends Phaser.Scene {
     );
 
   }
+
+  private resolveRenderPixelRatio(): number {
+    if (typeof window === "undefined") {
+      return 1;
+    }
+
+    const raw = window.devicePixelRatio || 1;
+    if (!Number.isFinite(raw) || raw <= 0) {
+      return 1;
+    }
+    return Math.min(raw, 3);
+  }
+
+  private applyRenderContextQuality(): void {
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in this.ctx) {
+      this.ctx.imageSmoothingQuality = "high";
+    }
+  }
+
+  private hydratePlanetTileImages(): void {
+    this.tileImagesByTextureKey.clear();
+    for (const textureKey of PLANET_TILE_THEME.tileTextureKeys) {
+      if (!this.textures.exists(textureKey)) {
+        continue;
+      }
+      const texture = this.textures.get(textureKey);
+      const sourceImage = texture.getSourceImage() as CanvasImageSource | null;
+      if (sourceImage) {
+        this.tileImagesByTextureKey.set(textureKey, sourceImage);
+      }
+    }
+  }
+
+  private resolveTileImage = (tileType: number): CanvasImageSource | null => {
+    const textureKey = getPlanetTileTextureKey(tileType);
+    return this.tileImagesByTextureKey.get(textureKey) ?? null;
+  };
 
   private updateState(dt: number): void {
     if (this.previousPhase !== this.gameState.phase) {
@@ -690,10 +743,19 @@ export class GameScene extends Phaser.Scene {
       pathToDraw = this.hintPath;
     }
 
+    ctx.setTransform(this.renderPixelRatio, 0, 0, this.renderPixelRatio, 0, 0);
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, w, h);
 
-    drawBoard(ctx, this.gameState.board, this.layout, this.gameState.selectedTile, pathToDraw, pathAlpha);
+    drawBoard(
+      ctx,
+      this.gameState.board,
+      this.layout,
+      this.gameState.selectedTile,
+      pathToDraw,
+      pathAlpha,
+      this.resolveTileImage
+    );
     this.drawKeyboardCursor(ctx);
     this.hintButton.setDisabled(
       this.startScreen.isVisible() ||
@@ -704,7 +766,7 @@ export class GameScene extends Phaser.Scene {
       !!this.activePath
     );
 
-    this.drawHUD(ctx, w);
+    this.updateHudOverlay();
     if (this.hintFeedbackText && this.hintFeedbackTimer > 0) {
       this.drawHintFeedback(ctx, w, h);
     }
@@ -716,72 +778,36 @@ export class GameScene extends Phaser.Scene {
     if (this.noMovesWarning) {
       this.drawNoMovesWarning(ctx, w, h);
     }
-
-    if (this.gameState.phase === "won" || this.gameState.phase === "lost") {
-      this.drawOverlay(ctx, w, h);
-    }
+    this.updateResultOverlay();
     this.renderTexture.refresh();
   }
 
-  private drawHUD(ctx: CanvasRenderingContext2D, w: number): void {
-    const padding = BOARD_PADDING;
-    const hudY = 8;
+  private updateHudOverlay(): void {
+    if (!this.hudOverlay) {
+      return;
+    }
+
+    const visible = !this.startScreen.isVisible();
+    this.hudOverlay.setVisible(visible);
+    if (!visible) {
+      return;
+    }
+
     const currentLevel = this.progression.getCurrentIndex() + 1;
     const totalLevels = this.progression.getTotalLevels();
-
-    ctx.font = "bold 16px system-ui, sans-serif";
-    ctx.textBaseline = "middle";
-
-    ctx.fillStyle = HUD_TEXT_COLOR;
-    ctx.textAlign = "left";
-    ctx.fillText(`Level ${currentLevel}/${totalLevels}`, padding, hudY + 14);
-
-    ctx.textAlign = "right";
-    ctx.fillText(`Score ${this.gameState.score}`, w - padding, hudY + 14);
-
-    const barX = 90;
-    const barW = w - 180;
-    const barH = 8;
-    const barY = hudY + 10;
-
-    ctx.fillStyle = TIMER_BG_COLOR;
-    this.drawRoundBar(ctx, barX, barY, barW, barH, 4);
-    ctx.fill();
-
-    const ratio = Math.max(0, this.gameState.timerRemaining / this.gameState.timerTotal);
-    ctx.fillStyle = ratio < 0.25 ? TIMER_LOW_COLOR : TIMER_FILL_COLOR;
-    if (ratio > 0) {
-      this.drawRoundBar(ctx, barX, barY, barW * ratio, barH, 4);
-      ctx.fill();
-    }
-
+    const timerRatio = Math.max(0, this.gameState.timerRemaining / this.gameState.timerTotal);
     const seconds = Math.ceil(this.gameState.timerRemaining);
-    ctx.fillStyle = HUD_TEXT_COLOR;
-    ctx.textAlign = "center";
-    ctx.font = "12px system-ui, sans-serif";
-    ctx.fillText(`${seconds}s`, w / 2, barY + barH + 12);
+    const xpInStep = this.getXpProgressInStep();
 
-    const xpBarY = barY + 18;
-    const xpBarH = 6;
-    const xpProgress = this.getXpProgressInStep() / GameScene.PHOTO_REWARD_XP_STEP;
-
-    ctx.fillStyle = "rgba(255,255,255,0.14)";
-    this.drawRoundBar(ctx, barX, xpBarY, barW, xpBarH, 4);
-    ctx.fill();
-
-    if (xpProgress > 0) {
-      ctx.fillStyle = "#f6c445";
-      this.drawRoundBar(ctx, barX, xpBarY, barW * xpProgress, xpBarH, 4);
-      ctx.fill();
-    }
-
-    ctx.fillStyle = "rgba(255,255,255,0.78)";
-    ctx.font = "11px system-ui, sans-serif";
-    ctx.fillText(
-      `XP ${this.getXpProgressInStep()}/${GameScene.PHOTO_REWARD_XP_STEP} • Rewards ${this.photoRewardsUnlocked}`,
-      w / 2,
-      xpBarY + xpBarH + 8
-    );
+    this.hudOverlay.update({
+      levelLabel: `Level ${currentLevel}/${totalLevels}`,
+      scoreLabel: `Score ${this.gameState.score}`,
+      secondsLabel: `${seconds}s`,
+      timerRatio,
+      timerLow: timerRatio < 0.25,
+      xpLabel: `XP ${xpInStep}/${GameScene.PHOTO_REWARD_XP_STEP} • Rewards ${this.photoRewardsUnlocked}`,
+      xpRatio: xpInStep / GameScene.PHOTO_REWARD_XP_STEP,
+    });
   }
 
   private drawHintFeedback(ctx: CanvasRenderingContext2D, w: number, h: number): void {
@@ -885,6 +911,57 @@ export class GameScene extends Phaser.Scene {
     ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     ctx.font = "16px system-ui, sans-serif";
     ctx.fillText("Tap to restart", w / 2, h / 2 + 20);
+  }
+
+  private updateResultOverlay(): void {
+    if (!this.resultOverlay) {
+      return;
+    }
+
+    if (this.startScreen.isVisible() || this.noMovesWarning) {
+      this.resultOverlay.update({
+        phase: "hidden",
+        campaignCompleted: false,
+        currentLevel: 0,
+        totalLevels: 0,
+        score: 0,
+        lastWinXpGain: 0,
+        xpInStep: 0,
+        xpStep: GameScene.PHOTO_REWARD_XP_STEP,
+        rewardsUnlocked: 0,
+        rewardText: null,
+      });
+      return;
+    }
+
+    if (this.gameState.phase !== "won" && this.gameState.phase !== "lost") {
+      this.resultOverlay.update({
+        phase: "hidden",
+        campaignCompleted: false,
+        currentLevel: 0,
+        totalLevels: 0,
+        score: 0,
+        lastWinXpGain: 0,
+        xpInStep: 0,
+        xpStep: GameScene.PHOTO_REWARD_XP_STEP,
+        rewardsUnlocked: 0,
+        rewardText: null,
+      });
+      return;
+    }
+
+    this.resultOverlay.update({
+      phase: this.gameState.phase,
+      campaignCompleted: this.campaignCompleted,
+      currentLevel: this.progression.getCurrentIndex() + 1,
+      totalLevels: this.progression.getTotalLevels(),
+      score: this.gameState.score,
+      lastWinXpGain: this.lastWinXpGain,
+      xpInStep: this.getXpProgressInStep(),
+      xpStep: GameScene.PHOTO_REWARD_XP_STEP,
+      rewardsUnlocked: this.photoRewardsUnlocked,
+      rewardText: this.lastWinRewardText,
+    });
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, w: number, h: number): void {
