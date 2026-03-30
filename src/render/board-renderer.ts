@@ -48,7 +48,8 @@ export function drawBoard(
   board: BoardState,
   layout: BoardLayout,
   selectedTile: Coord | null,
-  activePath: TilePath | null
+  activePath: TilePath | null,
+  pathAlpha = 1
 ): void {
   const { offsetX, offsetY, cellSize } = layout;
 
@@ -123,7 +124,7 @@ export function drawBoard(
 
   // Bağlantı yolu çizgisi
   if (activePath && activePath.length >= 2) {
-    drawPath(ctx, activePath, layout);
+    drawPath(ctx, activePath, layout, pathAlpha);
   }
 }
 
@@ -133,8 +134,16 @@ export function drawBoard(
 function drawPath(
   ctx: CanvasRenderingContext2D,
   path: TilePath,
-  layout: BoardLayout
+  layout: BoardLayout,
+  alpha = 1
 ): void {
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  if (clampedAlpha <= 0) {
+    return;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = clampedAlpha;
   ctx.strokeStyle = PATH_LINE_COLOR;
   ctx.lineWidth = 4;
   ctx.lineCap = "round";
@@ -159,6 +168,7 @@ function drawPath(
     ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 }
 
 /**
@@ -441,3 +451,4 @@ function roundRect(
   ctx.arcTo(x, y, x + r, y, r);
   ctx.closePath();
 }
+

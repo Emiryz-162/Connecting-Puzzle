@@ -172,6 +172,7 @@ export class App {
     this.hintFeedbackTimer = 0;
     this.timeLowWarningPlayed = false;
     this.lastSuccessfulMatchAtMs = 0;
+    this.pathDisplayTimer = 0;
 
     this.gameState = {
       board,
@@ -341,6 +342,13 @@ export class App {
       }
     }
 
+    if (this.activePath && this.pathDisplayTimer > 0) {
+      this.pathDisplayTimer = Math.max(0, this.pathDisplayTimer - dt * 1000);
+      if (this.pathDisplayTimer <= 0) {
+        this.activePath = null;
+      }
+    }
+
     if (this.settingsOpen) return;
     if (this.gameState.phase !== "playing") return;
 
@@ -366,12 +374,6 @@ export class App {
       this.tutorialTimer -= dt;
     }
 
-    if (this.activePath && this.pathDisplayTimer > 0) {
-      this.pathDisplayTimer -= dt * 1000;
-      if (this.pathDisplayTimer <= 0) {
-        this.executeRemoval();
-      }
-    }
   }
 
   private handleTap(coord: Coord, boardWidth: number, boardHeight: number): void {
@@ -462,6 +464,7 @@ export class App {
     this.hintFeedbackTimer = 0;
 
     this.triggerHaptic("light");
+    this.executeRemoval();
   }
 
   private handleHintRequest(): void {
@@ -593,7 +596,6 @@ export class App {
       this.triggerHaptic("medium");
     }
 
-    this.activePath = null;
     this.pendingRemoval = null;
     this.hintPath = null;
     this.hintPathTimerMs = 0;
@@ -641,12 +643,19 @@ export class App {
     const ctx = this.ctx;
     const w = this.displayWidth;
     const h = this.displayHeight;
-    const pathToDraw = this.activePath ?? this.hintPath;
+    let pathToDraw: TilePath | null = null;
+    let pathAlpha = 1;
+    if (this.activePath && this.pathDisplayTimer > 0) {
+      pathToDraw = this.activePath;
+      pathAlpha = Math.max(0, Math.min(1, this.pathDisplayTimer / PATH_DISPLAY_DURATION));
+    } else {
+      pathToDraw = this.hintPath;
+    }
 
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, w, h);
 
-    drawBoard(ctx, this.gameState.board, this.layout, this.gameState.selectedTile, pathToDraw);
+    drawBoard(ctx, this.gameState.board, this.layout, this.gameState.selectedTile, pathToDraw, pathAlpha);
     this.drawKeyboardCursor(ctx);
     this.hintButton.setDisabled(
       this.startScreen.isVisible() ||
