@@ -157,6 +157,12 @@ const GAMEPLAY_MUSIC_SRC = "/assets/music/gameplay_loop.mp3";
 const GAMEPLAY_MUSIC_VOLUME = 0.2;
 const MUSIC_FADE_IN_MS = 420;
 const MUSIC_FADE_OUT_MS = 280;
+const APP_BASE_URL = import.meta.env.BASE_URL || "/";
+
+function resolveAssetUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${APP_BASE_URL}${normalizedPath}`;
+}
 
 export class AudioManager {
   private fxEnabled: boolean;
@@ -176,7 +182,7 @@ export class AudioManager {
     this.fxEnabled = fxEnabled;
     this.musicEnabled = musicEnabled;
 
-    this.musicAudio = new Audio(GAMEPLAY_MUSIC_SRC);
+    this.musicAudio = new Audio(resolveAssetUrl(GAMEPLAY_MUSIC_SRC));
     this.musicAudio.preload = "auto";
     this.musicAudio.loop = true;
     this.musicAudio.volume = 0;
@@ -249,7 +255,7 @@ export class AudioManager {
     }
 
     const config = SOUND_CONFIG[sound];
-    const audio = new Audio(config.src);
+    const audio = new Audio(resolveAssetUrl(config.src));
     audio.preload = "auto";
     audio.volume = config.volume;
     this.audioBySound.set(sound, audio);

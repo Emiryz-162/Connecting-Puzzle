@@ -4,8 +4,15 @@ function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>):
   Object.assign(element.style, style);
 }
 
+function getSafeTopOffsetCss(): string {
+  const isMobile = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const minTop = isMobile ? 120 : 45;
+  return `max(${minTop}px, calc(env(safe-area-inset-top, 0px) + 12px))`;
+}
+
 export class HintButton {
   private readonly button: HTMLButtonElement;
+  private readonly onWindowResize = (): void => this.applySafeAreaTop();
 
   constructor(onClick: HintClickHandler) {
     this.button = document.createElement("button");
@@ -16,7 +23,7 @@ export class HintButton {
 
     applyStyles(this.button, {
       position: "fixed",
-      top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+      top: getSafeTopOffsetCss(),
       left: "calc(env(safe-area-inset-left, 0px) + 12px)",
       zIndex: "40",
       border: "1px solid rgba(255,255,255,0.25)",
@@ -37,6 +44,8 @@ export class HintButton {
 
     this.button.addEventListener("click", onClick);
     document.body.appendChild(this.button);
+    window.addEventListener("resize", this.onWindowResize);
+    window.visualViewport?.addEventListener("resize", this.onWindowResize);
   }
 
   setDisabled(disabled: boolean): void {
@@ -47,6 +56,12 @@ export class HintButton {
   }
 
   destroy(): void {
+    window.removeEventListener("resize", this.onWindowResize);
+    window.visualViewport?.removeEventListener("resize", this.onWindowResize);
     this.button.remove();
+  }
+
+  private applySafeAreaTop(): void {
+    this.button.style.top = getSafeTopOffsetCss();
   }
 }

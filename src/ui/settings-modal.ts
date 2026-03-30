@@ -34,6 +34,12 @@ function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>):
   Object.assign(element.style, style);
 }
 
+function getSafeTopOffsetCss(): string {
+  const isMobile = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const minTop = isMobile ? 120 : 45;
+  return `max(${minTop}px, calc(env(safe-area-inset-top, 0px) + 12px))`;
+}
+
 export class SettingsModal {
   private settings: Settings;
   private readonly onSettingsChange: OnSettingsChange;
@@ -46,6 +52,7 @@ export class SettingsModal {
   private readonly panel: HTMLDivElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly toggles: Record<SettingsKey, HTMLInputElement>;
+  private readonly onWindowResize = (): void => this.applySafeAreaTop();
 
   private isOpen = false;
 
@@ -70,13 +77,13 @@ export class SettingsModal {
 
     this.button = document.createElement("button");
     this.button.type = "button";
-    this.button.textContent = "Settings";
+    this.button.textContent = "";
     this.button.setAttribute("aria-label", "Open settings");
     this.button.setAttribute("aria-haspopup", "dialog");
     this.button.setAttribute("aria-expanded", "false");
     applyStyles(this.button, {
       position: "fixed",
-      top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+      top: getSafeTopOffsetCss(),
       right: "calc(env(safe-area-inset-right, 0px) + 12px)",
       zIndex: "40",
       border: "1px solid rgba(255,255,255,0.25)",
@@ -91,8 +98,10 @@ export class SettingsModal {
       cursor: "pointer",
       touchAction: "manipulation",
       minHeight: "40px",
+      minWidth: "40px",
       pointerEvents: "auto",
     });
+    this.button.appendChild(this.createGearIcon());
 
     this.backdrop = document.createElement("div");
     applyStyles(this.backdrop, {
@@ -180,6 +189,8 @@ export class SettingsModal {
     this.closeButton.addEventListener("click", this.handleCloseClick);
     this.backdrop.addEventListener("click", this.handleBackdropClick);
     document.addEventListener("keydown", this.handleEscKey);
+    window.addEventListener("resize", this.onWindowResize);
+    window.visualViewport?.addEventListener("resize", this.onWindowResize);
   }
 
   setSettings(next: Settings): void {
@@ -192,6 +203,8 @@ export class SettingsModal {
     this.closeButton.removeEventListener("click", this.handleCloseClick);
     this.backdrop.removeEventListener("click", this.handleBackdropClick);
     document.removeEventListener("keydown", this.handleEscKey);
+    window.removeEventListener("resize", this.onWindowResize);
+    window.visualViewport?.removeEventListener("resize", this.onWindowResize);
 
     this.button.remove();
     this.backdrop.remove();
@@ -254,6 +267,28 @@ export class SettingsModal {
 
     row.append(textWrap, input);
     return row;
+  }
+
+  private createGearIcon(): SVGElement {
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("viewBox", "0 0 24 24");
+    icon.setAttribute("width", "18");
+    icon.setAttribute("height", "18");
+    icon.setAttribute("aria-hidden", "true");
+    icon.style.display = "block";
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute(
+      "d",
+      "M19.4 13a7.3 7.3 0 0 0 .1-1 7.3 7.3 0 0 0-.1-1l2-1.5-1.9-3.2-2.3.9a7.2 7.2 0 0 0-1.7-1l-.3-2.5h-3.8l-.3 2.5a7.2 7.2 0 0 0-1.7 1l-2.3-.9-1.9 3.2 2 1.5a7.3 7.3 0 0 0-.1 1 7.3 7.3 0 0 0 .1 1l-2 1.5 1.9 3.2 2.3-.9c.5.4 1.1.7 1.7 1l.3 2.5h3.8l.3-2.5c.6-.3 1.2-.6 1.7-1l2.3.9 1.9-3.2-2-1.5zM12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4z"
+    );
+    path.setAttribute("fill", "currentColor");
+    icon.appendChild(path);
+    return icon;
+  }
+
+  private applySafeAreaTop(): void {
+    this.button.style.top = getSafeTopOffsetCss();
   }
 
   private syncToggleInputs(settings: Settings): void {

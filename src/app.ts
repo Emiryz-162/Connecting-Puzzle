@@ -23,6 +23,7 @@ import { LevelProgression } from "./levels/progression";
 import { SettingsStore } from "./settings/store";
 import { SettingsModal } from "./ui/settings-modal";
 import { HintButton } from "./ui/hint-button";
+import { StartScreen } from "./ui/start-screen";
 import { AudioManager, GAME_SOUNDS } from "./audio/audio-manager";
 import { submitOasizScore, triggerOasizHaptic } from "./platform/oasiz";
 import {
@@ -63,6 +64,7 @@ export class App {
   private settingsStore: SettingsStore;
   private settingsModal: SettingsModal;
   private hintButton: HintButton;
+  private startScreen: StartScreen;
   private audio: AudioManager;
   private settings: Settings;
   private settingsOpen = false;
@@ -91,6 +93,7 @@ export class App {
   private timeLowWarningPlayed = false;
   private lastSuccessfulMatchAtMs = 0;
   private readonly onResize = (): void => this.handleResize();
+  private keyboardCursor: Coord | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -117,7 +120,7 @@ export class App {
       (isOpen) => {
         this.settingsOpen = isOpen;
         if (this.inputHandler) {
-          this.inputHandler.setEnabled(!isOpen);
+          this.inputHandler.setEnabled(!isOpen && !this.startScreen.isVisible());
         }
         if (isOpen && this.gameState) {
           this.gameState.selectedTile = null;
@@ -135,13 +138,16 @@ export class App {
       this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
       this.handleHintRequest();
     });
+    this.startScreen = new StartScreen(() => this.handleStartScreenPlay());
 
     this.handleResize();
     window.addEventListener("resize", this.onResize);
     window.visualViewport?.addEventListener("resize", this.onResize);
     window.visualViewport?.addEventListener("scroll", this.onResize);
+    window.addEventListener("keydown", this.handleKeyDown);
 
     this.initLevel(this.progression.getCurrentLevel(), false);
+    this.pauseForStartScreen();
 
     requestAnimationFrame((t) => {
       this.lastTimestamp = t;
@@ -177,6 +183,7 @@ export class App {
       phase: "playing",
       inputLocked: false,
     };
+    this.keyboardCursor = this.findInitialKeyboardCursor(board);
     this.previousPhase = this.gameState.phase;
     this.overlayIntroTimer = 0;
 
@@ -204,7 +211,7 @@ export class App {
       board.width,
       board.height
     );
-    this.inputHandler.setEnabled(!this.settingsOpen);
+    this.inputHandler.setEnabled(!this.settingsOpen && !this.startScreen.isVisible());
   }
 
   /** Build a board and guarantee at least one valid move at start. */
@@ -368,8 +375,14 @@ export class App {
   }
 
   private handleTap(coord: Coord, boardWidth: number, boardHeight: number): void {
+    if (this.startScreen.isVisible()) {
+      return;
+    }
     if (this.settingsOpen) {
       return;
+    }
+    if (coord.col >= 0 && coord.col < boardWidth && coord.row >= 0 && coord.row < boardHeight) {
+      this.keyboardCursor = { ...coord };
     }
     this.hintPath = null;
     this.hintPathTimerMs = 0;
@@ -452,6 +465,7 @@ export class App {
   }
 
   private handleHintRequest(): void {
+    if (this.startScreen.isVisible()) return;
     if (this.settingsOpen) return;
     if (this.gameState.phase !== "playing") return;
     if (this.gameState.inputLocked) return;
@@ -633,7 +647,9 @@ export class App {
     ctx.fillRect(0, 0, w, h);
 
     drawBoard(ctx, this.gameState.board, this.layout, this.gameState.selectedTile, pathToDraw);
+    this.drawKeyboardCursor(ctx);
     this.hintButton.setDisabled(
+      this.startScreen.isVisible() ||
       this.settingsOpen ||
       this.gameState.phase !== "playing" ||
       this.gameState.inputLocked ||
@@ -744,6 +760,34 @@ export class App {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.hintFeedbackText ?? "", w / 2, y + boxH / 2);
+    ctx.restore();
+  }
+
+  private drawKeyboardCursor(ctx: CanvasRenderingContext2D): void {
+    if (!this.keyboardCursor) return;
+    if (this.startScreen.isVisible()) return;
+    if (this.settingsOpen) return;
+    if (this.gameState.phase !== "playing") return;
+
+    const { col, row } = this.keyboardCursor;
+    if (
+      col < 0 ||
+      col >= this.gameState.board.width ||
+      row < 0 ||
+      row >= this.gameState.board.height
+    ) {
+      return;
+    }
+
+    const x = this.layout.offsetX + col * this.layout.cellSize + 2;
+    const y = this.layout.offsetY + row * this.layout.cellSize + 2;
+    const size = this.layout.cellSize - 4;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(246, 196, 69, 0.95)";
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x, y, size, size);
     ctx.restore();
   }
 
@@ -926,4 +970,109 @@ export class App {
 
     ctx.restore();
   }
+
+  private pauseForStartScreen(): void {
+    this.gameState.phase = "paused";
+    this.gameState.selectedTile = null;
+    this.startScreen.show();
+    if (this.inputHandler) {
+      this.inputHandler.setEnabled(false);
+    }
+  }
+
+  private handleStartScreenPlay(): void {
+    if (!this.startScreen.isVisible()) {
+      return;
+    }
+
+    this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+    this.startScreen.hide();
+    if (this.gameState.phase === "paused") {
+      this.gameState.phase = "playing";
+    }
+    this.inputHandler?.setEnabled(!this.settingsOpen);
+    this.triggerHaptic("light");
+  }
+
+  private findInitialKeyboardCursor(board: BoardState): Coord {
+    for (let row = 0; row < board.height; row++) {
+      for (let col = 0; col < board.width; col++) {
+        const cell = board.cells[row][col];
+        if (cell.kind === CellKind.Tile) {
+          return { row, col };
+        }
+      }
+    }
+
+    return { row: 0, col: 0 };
+  }
+
+  private handleKeyDown = (event: KeyboardEvent): void => {
+    const target = event.target as HTMLElement | null;
+    if (
+      target &&
+      (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.tagName === "BUTTON" ||
+        target.isContentEditable
+      )
+    ) {
+      return;
+    }
+
+    if (this.startScreen.isVisible()) {
+      return;
+    }
+
+    if (this.settingsOpen) {
+      return;
+    }
+
+    const board = this.gameState.board;
+    const cursor = this.keyboardCursor ?? this.findInitialKeyboardCursor(board);
+    let nextCol = cursor.col;
+    let nextRow = cursor.row;
+    let handledMove = false;
+
+    switch (event.key) {
+      case "ArrowLeft":
+        nextCol = Math.max(0, cursor.col - 1);
+        handledMove = true;
+        break;
+      case "ArrowRight":
+        nextCol = Math.min(board.width - 1, cursor.col + 1);
+        handledMove = true;
+        break;
+      case "ArrowUp":
+        nextRow = Math.max(0, cursor.row - 1);
+        handledMove = true;
+        break;
+      case "ArrowDown":
+        nextRow = Math.min(board.height - 1, cursor.row + 1);
+        handledMove = true;
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        this.handleTap(cursor, board.width, board.height);
+        return;
+      case "h":
+      case "H":
+        event.preventDefault();
+        this.handleHintRequest();
+        return;
+      default:
+        return;
+    }
+
+    if (handledMove) {
+      event.preventDefault();
+      this.keyboardCursor = { row: nextRow, col: nextCol };
+      if (this.gameState.phase === "playing") {
+        this.audio.play(GAME_SOUNDS.TILE_SELECT_SOFT);
+      }
+    }
+  };
 }
