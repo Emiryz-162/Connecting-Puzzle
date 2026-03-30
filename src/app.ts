@@ -550,7 +550,7 @@ export class App {
     const isChainMatch =
       this.lastSuccessfulMatchAtMs > 0 &&
       nowMs - this.lastSuccessfulMatchAtMs <= App.MATCH_CHAIN_WINDOW_MS;
-    this.audio.play(isChainMatch ? GAME_SOUNDS.TILE_MATCH_CHAIN : GAME_SOUNDS.TILE_MATCH_SUCCESS);
+    this.audio.play(GAME_SOUNDS.TILE_MATCH_SUCCESS);
     this.lastSuccessfulMatchAtMs = nowMs;
     this.runScore += 100;
     this.gameState.score = this.runScore;
