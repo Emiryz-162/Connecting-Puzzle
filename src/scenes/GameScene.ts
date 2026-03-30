@@ -43,7 +43,7 @@ import {
 } from "../constants";
 
 // Test helper: change this to start directly from a specific level id (1..30).
-const START_LEVEL_ID_FOR_TESTING = 1;
+const START_LEVEL_ID_FOR_TESTING = 23;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
 
 export class GameScene extends Phaser.Scene {
@@ -67,6 +67,8 @@ export class GameScene extends Phaser.Scene {
   private monkeyImage: CanvasImageSource | null = null;
   private iceOverlayImage: CanvasImageSource | null = null;
   private foodsBackgroundImage: CanvasImageSource | null = null;
+  private landmarksBackgroundImage: CanvasImageSource | null = null;
+  private planetsBackgroundImage: CanvasImageSource | null = null;
 
   private gameState!: GameState;
   private layout!: BoardLayout;
@@ -247,6 +249,10 @@ export class GameScene extends Phaser.Scene {
     this.monkeyImage = null;
     this.iceOverlayImage = null;
     this.foodsBackgroundImage = null;
+    this.landmarksBackgroundImage = null;
+    this.planetsBackgroundImage = null;
+    this.landmarksBackgroundImage = null;
+    this.planetsBackgroundImage = null;
     if (this.renderCanvas) {
       this.renderCanvas.remove();
     }
@@ -431,6 +437,16 @@ export class GameScene extends Phaser.Scene {
       const foodsBackgroundTexture = this.textures.get(SPECIAL_TEXTURE_KEYS.foodsBackground);
       this.foodsBackgroundImage =
         (foodsBackgroundTexture.getSourceImage() as CanvasImageSource | null) ?? null;
+    }
+    if (this.textures.exists(SPECIAL_TEXTURE_KEYS.landmarksBackground)) {
+      const landmarksBackgroundTexture = this.textures.get(SPECIAL_TEXTURE_KEYS.landmarksBackground);
+      this.landmarksBackgroundImage =
+        (landmarksBackgroundTexture.getSourceImage() as CanvasImageSource | null) ?? null;
+    }
+    if (this.textures.exists(SPECIAL_TEXTURE_KEYS.planetsBackground)) {
+      const planetsBackgroundTexture = this.textures.get(SPECIAL_TEXTURE_KEYS.planetsBackground);
+      this.planetsBackgroundImage =
+        (planetsBackgroundTexture.getSourceImage() as CanvasImageSource | null) ?? null;
     }
   }
 
@@ -818,7 +834,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawSceneBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const image = this.activeTheme === "foods" ? this.foodsBackgroundImage : null;
+    const image = this.resolveThemeBackgroundImage();
     if (!image) {
       ctx.fillStyle = BG_COLOR;
       ctx.fillRect(0, 0, width, height);
@@ -843,6 +859,19 @@ export class GameScene extends Phaser.Scene {
     // Keep gameplay readability over a textured background.
     ctx.fillStyle = "rgba(5, 12, 30, 0.42)";
     ctx.fillRect(0, 0, width, height);
+  }
+
+  private resolveThemeBackgroundImage(): CanvasImageSource | null {
+    if (this.activeTheme === "foods") {
+      return this.foodsBackgroundImage;
+    }
+    if (this.activeTheme === "landmarks") {
+      return this.landmarksBackgroundImage;
+    }
+    if (this.activeTheme === "planets") {
+      return this.planetsBackgroundImage;
+    }
+    return null;
   }
 
   private getCanvasImageSize(image: CanvasImageSource): { width: number; height: number } | null {

@@ -34,6 +34,18 @@ export class BootScene extends Phaser.Scene {
         SPECIAL_ASSET_PATHS[SPECIAL_TEXTURE_KEYS.foodsBackground]
       );
     }
+    if (!this.textures.exists(SPECIAL_TEXTURE_KEYS.landmarksBackground)) {
+      this.load.image(
+        SPECIAL_TEXTURE_KEYS.landmarksBackground,
+        SPECIAL_ASSET_PATHS[SPECIAL_TEXTURE_KEYS.landmarksBackground]
+      );
+    }
+    if (!this.textures.exists(SPECIAL_TEXTURE_KEYS.planetsBackground)) {
+      this.load.image(
+        SPECIAL_TEXTURE_KEYS.planetsBackground,
+        SPECIAL_ASSET_PATHS[SPECIAL_TEXTURE_KEYS.planetsBackground]
+      );
+    }
   }
 
   create(): void {
