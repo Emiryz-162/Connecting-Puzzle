@@ -90,6 +90,7 @@ export class App {
   private overlayIntroTimer = 0;
   private timeLowWarningPlayed = false;
   private lastSuccessfulMatchAtMs = 0;
+  private readonly onResize = (): void => this.handleResize();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -115,6 +116,12 @@ export class App {
       },
       (isOpen) => {
         this.settingsOpen = isOpen;
+        if (this.inputHandler) {
+          this.inputHandler.setEnabled(!isOpen);
+        }
+        if (isOpen && this.gameState) {
+          this.gameState.selectedTile = null;
+        }
       },
       (_key, value) => {
         this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
@@ -130,7 +137,9 @@ export class App {
     });
 
     this.handleResize();
-    window.addEventListener("resize", () => this.handleResize());
+    window.addEventListener("resize", this.onResize);
+    window.visualViewport?.addEventListener("resize", this.onResize);
+    window.visualViewport?.addEventListener("scroll", this.onResize);
 
     this.initLevel(this.progression.getCurrentLevel(), false);
 
@@ -195,6 +204,7 @@ export class App {
       board.width,
       board.height
     );
+    this.inputHandler.setEnabled(!this.settingsOpen);
   }
 
   /** Build a board and guarantee at least one valid move at start. */
@@ -257,11 +267,14 @@ export class App {
 
   private handleResize(): void {
     const dpr = window.devicePixelRatio || 1;
-    this.displayWidth = window.innerWidth;
-    this.displayHeight = window.innerHeight;
+    const viewport = window.visualViewport;
+    this.displayWidth = Math.round(viewport?.width ?? window.innerWidth);
+    this.displayHeight = Math.round(viewport?.height ?? window.innerHeight);
 
     this.canvas.width = this.displayWidth * dpr;
     this.canvas.height = this.displayHeight * dpr;
+    this.canvas.style.width = `${this.displayWidth}px`;
+    this.canvas.style.height = `${this.displayHeight}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     if (this.gameState) {

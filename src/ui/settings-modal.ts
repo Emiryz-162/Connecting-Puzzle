@@ -73,6 +73,7 @@ export class SettingsModal {
     this.button.textContent = "Settings";
     this.button.setAttribute("aria-label", "Open settings");
     this.button.setAttribute("aria-haspopup", "dialog");
+    this.button.setAttribute("aria-expanded", "false");
     applyStyles(this.button, {
       position: "fixed",
       top: "calc(env(safe-area-inset-top, 0px) + 12px)",
@@ -90,6 +91,7 @@ export class SettingsModal {
       cursor: "pointer",
       touchAction: "manipulation",
       minHeight: "40px",
+      pointerEvents: "auto",
     });
 
     this.backdrop = document.createElement("div");
@@ -106,6 +108,7 @@ export class SettingsModal {
       paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
       paddingLeft: "calc(env(safe-area-inset-left, 0px) + 12px)",
       pointerEvents: "none",
+      touchAction: "none",
     });
 
     this.panel = document.createElement("div");
@@ -123,6 +126,7 @@ export class SettingsModal {
       color: "#ffffff",
       padding: "16px",
       fontFamily: "system-ui, sans-serif",
+      pointerEvents: "auto",
     });
 
     const header = document.createElement("div");
@@ -157,6 +161,7 @@ export class SettingsModal {
       cursor: "pointer",
       touchAction: "manipulation",
       minHeight: "34px",
+      pointerEvents: "auto",
     });
 
     header.append(title, this.closeButton);
@@ -265,6 +270,7 @@ export class SettingsModal {
     this.isOpen = true;
     this.backdrop.style.display = "flex";
     this.backdrop.style.pointerEvents = "auto";
+    this.button.setAttribute("aria-expanded", "true");
     this.onOpenChange(true);
   }
 
@@ -276,6 +282,7 @@ export class SettingsModal {
     this.isOpen = false;
     this.backdrop.style.display = "none";
     this.backdrop.style.pointerEvents = "none";
+    this.button.setAttribute("aria-expanded", "false");
     this.onOpenChange(false);
   }
 

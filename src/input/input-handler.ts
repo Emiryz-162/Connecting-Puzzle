@@ -1,22 +1,17 @@
-// ── input/input-handler.ts ──
-// Mouse ve touch event'lerini grid koordinatlarına dönüştürür.
-// Hem mobil hem desktop'ta çalışır.
-// Touch event'lerinde preventDefault ile double-fire önlenir.
-
-import { BoardLayout, Coord } from "../types";
+﻿import { BoardLayout, Coord } from "../types";
 
 export type TapCallback = (coord: Coord, boardWidth: number, boardHeight: number) => void;
 
-/**
- * Input handler: canvas üzerindeki tap/click'leri grid koordinatına çevirip
- * callback'e iletir.
- */
 export class InputHandler {
-  private canvas: HTMLCanvasElement;
-  private callback: TapCallback;
+  private readonly canvas: HTMLCanvasElement;
+  private readonly callback: TapCallback;
+
   private layout: BoardLayout;
   private boardWidth: number;
   private boardHeight: number;
+  private enabled = true;
+
+  private readonly usePointerEvents: boolean;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -31,46 +26,72 @@ export class InputHandler {
     this.boardWidth = boardWidth;
     this.boardHeight = boardHeight;
 
-    // Event listener'ları bağla
-    this.canvas.addEventListener("mousedown", this.handleMouse);
-    this.canvas.addEventListener("touchstart", this.handleTouch, { passive: false });
+    this.usePointerEvents = typeof window !== "undefined" && "PointerEvent" in window;
+
+    if (this.usePointerEvents) {
+      this.canvas.addEventListener("pointerdown", this.handlePointerDown, { passive: false });
+    } else {
+      this.canvas.addEventListener("mousedown", this.handleMouseDown);
+      this.canvas.addEventListener("touchstart", this.handleTouchStart, { passive: false });
+    }
   }
 
-  /** Layout veya board boyutu değiştiğinde güncelle */
   updateLayout(layout: BoardLayout, boardWidth: number, boardHeight: number): void {
     this.layout = layout;
     this.boardWidth = boardWidth;
     this.boardHeight = boardHeight;
   }
 
-  /** Temizlik */
-  destroy(): void {
-    this.canvas.removeEventListener("mousedown", this.handleMouse);
-    this.canvas.removeEventListener("touchstart", this.handleTouch);
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
   }
 
-  private handleMouse = (e: MouseEvent): void => {
-    // Touch cihazlarda mousedown'u atla (touchstart zaten tetikleniyor)
-    this.processTap(e.clientX, e.clientY);
-  };
-
-  private handleTouch = (e: TouchEvent): void => {
-    e.preventDefault(); // Scroll ve double-fire engelle
-    if (e.touches.length > 0) {
-      const touch = e.touches[0];
-      this.processTap(touch.clientX, touch.clientY);
+  destroy(): void {
+    if (this.usePointerEvents) {
+      this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+    } else {
+      this.canvas.removeEventListener("mousedown", this.handleMouseDown);
+      this.canvas.removeEventListener("touchstart", this.handleTouchStart);
     }
+  }
+
+  private handlePointerDown = (event: PointerEvent): void => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+    if (event.pointerType !== "mouse") {
+      event.preventDefault();
+    }
+    this.processTap(event.clientX, event.clientY);
   };
 
-  /**
-   * Piksel koordinatını grid koordinatına çevirir ve callback'i çağırır.
-   * Grid dışı tıklamalar yine callback'e gider (overlay vs. için).
-   */
+  private handleMouseDown = (event: MouseEvent): void => {
+    if (event.button !== 0) {
+      return;
+    }
+    this.processTap(event.clientX, event.clientY);
+  };
+
+  private handleTouchStart = (event: TouchEvent): void => {
+    event.preventDefault();
+    const touch = event.touches[0];
+    if (!touch) {
+      return;
+    }
+    this.processTap(touch.clientX, touch.clientY);
+  };
+
   private processTap(clientX: number, clientY: number): void {
+    if (!this.enabled) {
+      return;
+    }
+    if (!Number.isFinite(this.layout.cellSize) || this.layout.cellSize <= 0) {
+      return;
+    }
+
     const col = Math.floor((clientX - this.layout.offsetX) / this.layout.cellSize);
     const row = Math.floor((clientY - this.layout.offsetY) / this.layout.cellSize);
 
-    // Grid sınırları dahilinde mi kontrol et
     this.callback({ col, row }, this.boardWidth, this.boardHeight);
   }
 }

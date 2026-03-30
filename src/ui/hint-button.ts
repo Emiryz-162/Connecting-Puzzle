@@ -32,6 +32,7 @@ export class HintButton {
       touchAction: "manipulation",
       minHeight: "40px",
       minWidth: "68px",
+      pointerEvents: "auto",
     });
 
     this.button.addEventListener("click", onClick);
