@@ -43,7 +43,7 @@ import {
 } from "../constants";
 
 // Test helper: change this to start directly from a specific level id (1..30).
-const START_LEVEL_ID_FOR_TESTING = 23;
+const START_LEVEL_ID_FOR_TESTING = 1;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
 
 export class GameScene extends Phaser.Scene {

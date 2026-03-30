@@ -4,7 +4,6 @@ import {
   HUD_HEIGHT,
   CELL_GAP,
   CELL_BG_COLOR,
-  GRID_BG_COLOR,
   SELECTED_BORDER_COLOR,
   PATH_LINE_COLOR,
   TILE_DEFS,
@@ -12,6 +11,8 @@ import {
 
 type TileImageResolver = (tileType: TileTypeId) => CanvasImageSource | null;
 const TILE_IMAGE_FIT_RATIO = 0.92;
+const TILE_GLITCH_IMAGE_ALPHA = 0.88;
+const TRANSPARENT_TILE_CACHE = new WeakMap<CanvasImageSource, HTMLCanvasElement>();
 
 export function calculateLayout(
   displayW: number,
@@ -65,16 +66,13 @@ export function drawBoard(
 ): void {
   const { offsetX, offsetY, cellSize } = layout;
 
-  ctx.fillStyle = GRID_BG_COLOR;
-  roundRect(
+  drawGridGlassBackdrop(
     ctx,
     offsetX - 4,
     offsetY - 4,
     board.width * cellSize + 8,
-    board.height * cellSize + 8,
-    8
+    board.height * cellSize + 8
   );
-  ctx.fill();
 
   for (let row = 0; row < board.height; row++) {
     for (let col = 0; col < board.width; col++) {
@@ -86,16 +84,14 @@ export function drawBoard(
       const cy = offsetY + (row + 0.5) * cellSize;
       const radius = size * 0.32;
 
-      ctx.fillStyle = CELL_BG_COLOR;
-      roundRect(ctx, x, y, size, size, 6);
-      ctx.fill();
+      drawCellPanel(ctx, x, y, size, row, col);
 
       if (cell.kind === CellKind.Tile && cell.tileType !== null) {
-        drawTileSprite(ctx, cell.tileType, cx, cy, radius, size, resolveTileImage);
+        drawTileSprite(ctx, cell.tileType, cx, cy, radius, size, resolveTileImage, row, col);
       }
 
       if (cell.kind === CellKind.FrozenTile && cell.tileType !== null) {
-        drawTileSprite(ctx, cell.tileType, cx, cy, radius, size, resolveTileImage);
+        drawTileSprite(ctx, cell.tileType, cx, cy, radius, size, resolveTileImage, row, col);
         drawFrozenOverlay(ctx, x, y, size, frozenOverlayImage ?? null);
       }
 
@@ -128,6 +124,53 @@ export function drawBoard(
   if (activePath && activePath.length >= 2) {
     drawPath(ctx, activePath, layout, pathAlpha);
   }
+}
+
+function drawGridGlassBackdrop(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number
+): void {
+  ctx.save();
+
+  // Main board panel: transparent glass, not solid blue.
+  const panelGradient = ctx.createLinearGradient(x, y, x, y + h);
+  panelGradient.addColorStop(0, "rgba(210, 238, 255, 0.10)");
+  panelGradient.addColorStop(0.5, "rgba(182, 225, 255, 0.06)");
+  panelGradient.addColorStop(1, "rgba(166, 218, 255, 0.03)");
+  ctx.fillStyle = panelGradient;
+  roundRect(ctx, x, y, w, h, 8);
+  ctx.fill();
+
+  // Inner haze to keep board boundaries readable while staying transparent.
+  ctx.fillStyle = "rgba(255, 255, 255, 0.035)";
+  roundRect(ctx, x + 2, y + 2, w - 4, h - 4, 7);
+  ctx.fill();
+
+  // Glitch scan accents on board container (static, deterministic).
+  const lineCount = Math.max(5, Math.floor(h / 70));
+  for (let i = 0; i < lineCount; i++) {
+    const n = stableNoise((i + 1) * 67 + Math.floor(w) * 3 + Math.floor(h));
+    const yy = y + Math.floor(h * (0.05 + n * 0.9));
+    const pad = Math.floor(w * (0.02 + stableNoise((i + 5) * 41) * 0.04));
+    ctx.strokeStyle =
+      i % 2 === 0 ? "rgba(108, 228, 255, 0.18)" : "rgba(255, 108, 206, 0.14)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + pad, yy + 0.5);
+    ctx.lineTo(x + w - pad, yy + 0.5);
+    ctx.stroke();
+  }
+
+  // Subtle border glow.
+  ctx.strokeStyle = "rgba(208, 239, 255, 0.28)";
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 8);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawPath(
@@ -176,11 +219,23 @@ function drawTileSprite(
   cy: number,
   radius: number,
   cellSize: number,
-  resolveTileImage?: TileImageResolver
+  resolveTileImage: TileImageResolver | undefined,
+  row: number,
+  col: number
 ): void {
   const imageSource = resolveTileImage?.(tileType) ?? null;
   if (imageSource) {
-    drawTileImage(ctx, imageSource, cx, cy, cellSize * TILE_IMAGE_FIT_RATIO, cellSize * TILE_IMAGE_FIT_RATIO);
+    drawGlitchTileImage(
+      ctx,
+      imageSource,
+      cx,
+      cy,
+      cellSize * TILE_IMAGE_FIT_RATIO,
+      cellSize * TILE_IMAGE_FIT_RATIO,
+      row,
+      col,
+      tileType
+    );
     return;
   }
 
@@ -287,8 +342,183 @@ function drawTileSprite(
       break;
   }
 
+  ctx.globalAlpha = 0.82;
   ctx.fill();
+  ctx.globalAlpha = 1;
   ctx.stroke();
+}
+
+function drawCellPanel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  row: number,
+  col: number
+): void {
+  ctx.save();
+
+  // Glass base: bright and translucent (not dark), so background remains visible.
+  const glassGradient = ctx.createLinearGradient(x, y, x, y + size);
+  glassGradient.addColorStop(0, "rgba(210, 236, 255, 0.16)");
+  glassGradient.addColorStop(0.45, "rgba(176, 224, 255, 0.10)");
+  glassGradient.addColorStop(1, "rgba(165, 214, 255, 0.06)");
+  ctx.fillStyle = glassGradient;
+  roundRect(ctx, x, y, size, size, 6);
+  ctx.fill();
+
+  const inset = Math.max(2, size * 0.08);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+  roundRect(ctx, x + inset, y + inset, size - inset * 2, size - inset * 2, 5);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(214, 241, 255, 0.46)";
+  ctx.lineWidth = 1.1;
+  roundRect(ctx, x + 0.5, y + 0.5, size - 1, size - 1, 6);
+  ctx.stroke();
+
+  // Specular highlight strip for glass feel.
+  const shineH = Math.max(2, Math.floor(size * 0.16));
+  ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
+  roundRect(ctx, x + 2, y + 2, size - 4, shineH, 4);
+  ctx.fill();
+
+  // Static (deterministic) glitch scan lines per-cell, no flicker.
+  const lineCount = 2;
+  for (let i = 0; i < lineCount; i++) {
+    const n = stableNoise((row + 1) * 73 + (col + 1) * 97 + i * 17);
+    const yy = y + Math.floor(size * (0.22 + n * 0.56));
+    const pad = Math.floor(size * (0.14 + n * 0.12));
+    ctx.strokeStyle = i % 2 === 0 ? "rgba(112, 232, 255, 0.24)" : "rgba(255, 104, 196, 0.20)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + pad, yy);
+    ctx.lineTo(x + size - pad, yy);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawGlitchTileImage(
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  cx: number,
+  cy: number,
+  maxW: number,
+  maxH: number,
+  row: number,
+  col: number,
+  tileType: number
+): void {
+  const prepared = prepareTransparentTileImage(image);
+  const size = getImageSourceSize(prepared);
+  if (!size) {
+    return;
+  }
+
+  const scale = Math.min(maxW / size.width, maxH / size.height);
+  const drawW = Math.max(1, Math.round(size.width * scale));
+  const drawH = Math.max(1, Math.round(size.height * scale));
+  const drawX = Math.round(cx - drawW / 2);
+  const drawY = Math.round(cy - drawH / 2);
+
+  ctx.save();
+  ctx.globalAlpha = TILE_GLITCH_IMAGE_ALPHA;
+  ctx.drawImage(prepared, drawX, drawY, drawW, drawH);
+  ctx.restore();
+
+  const glitchBands = 2;
+  for (let i = 0; i < glitchBands; i++) {
+    const seed = (row + 1) * 131 + (col + 1) * 197 + (tileType + 1) * 43 + i * 13;
+    const n = stableNoise(seed);
+    const n2 = stableNoise(seed + 11);
+    const bandH = Math.max(2, Math.floor(drawH * (0.09 + n * 0.11)));
+    const bandY = drawY + Math.floor((drawH - bandH) * n2);
+    const shift = Math.floor(((stableNoise(seed + 23) - 0.5) * drawW) * 0.10);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(drawX, bandY, drawW, bandH);
+    ctx.clip();
+    ctx.globalAlpha = 0.26;
+    ctx.drawImage(prepared, drawX + shift, drawY, drawW, drawH);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = i % 2 === 0 ? "#6de7ff" : "#ff66c4";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(drawX + 2, bandY + 0.5);
+    ctx.lineTo(drawX + drawW - 2, bandY + 0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Soft holographic frame so tile stays readable on busy backgrounds.
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.20)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, drawX + 0.5, drawY + 0.5, drawW - 1, drawH - 1, Math.max(4, drawW * 0.11));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function prepareTransparentTileImage(image: CanvasImageSource): CanvasImageSource {
+  if (TRANSPARENT_TILE_CACHE.has(image)) {
+    return TRANSPARENT_TILE_CACHE.get(image)!;
+  }
+
+  if (typeof document === "undefined") {
+    return image;
+  }
+
+  const size = getImageSourceSize(image);
+  if (!size) {
+    return image;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) {
+    return image;
+  }
+
+  ctx.drawImage(image, 0, 0, size.width, size.height);
+  const imageData = ctx.getImageData(0, 0, size.width, size.height);
+  const d = imageData.data;
+
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+    const a = d[i + 3];
+    if (a === 0) {
+      continue;
+    }
+
+    const maxRG = Math.max(r, g);
+    const blueDominant = b > maxRG * 1.18;
+    const likelyPanelBlue =
+      blueDominant &&
+      b > 58 &&
+      r < 155 &&
+      g < 175 &&
+      (b - maxRG) > 16;
+
+    if (likelyPanelBlue) {
+      const strength = Math.min(1, (b - maxRG) / 120 + (130 - Math.min(130, r)) / 220);
+      const targetAlpha = a * (0.06 + (1 - strength) * 0.16);
+      d[i + 3] = Math.max(0, Math.min(255, Math.round(targetAlpha)));
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  TRANSPARENT_TILE_CACHE.set(image, canvas);
+  return canvas;
 }
 
 function drawTileImage(
@@ -520,4 +750,9 @@ function roundRect(
   ctx.lineTo(x, y + r);
   ctx.arcTo(x, y, x + r, y, r);
   ctx.closePath();
+}
+
+function stableNoise(seed: number): number {
+  const v = Math.sin(seed * 12.9898) * 43758.5453123;
+  return v - Math.floor(v);
 }
