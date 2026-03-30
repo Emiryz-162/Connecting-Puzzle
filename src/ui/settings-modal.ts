@@ -3,6 +3,8 @@
 type SettingsKey = keyof Settings;
 type OnSettingsChange = (settings: Settings) => void;
 type OnOpenChange = (isOpen: boolean) => void;
+type OnToggleInteraction = (key: SettingsKey, value: boolean) => void;
+type OnPrimaryButtonClick = () => void;
 
 interface ToggleDef {
   key: SettingsKey;
@@ -36,6 +38,8 @@ export class SettingsModal {
   private settings: Settings;
   private readonly onSettingsChange: OnSettingsChange;
   private readonly onOpenChange: OnOpenChange;
+  private readonly onToggleInteraction?: OnToggleInteraction;
+  private readonly onPrimaryButtonClick?: OnPrimaryButtonClick;
 
   private readonly button: HTMLButtonElement;
   private readonly backdrop: HTMLDivElement;
@@ -45,10 +49,18 @@ export class SettingsModal {
 
   private isOpen = false;
 
-  constructor(initialSettings: Settings, onSettingsChange: OnSettingsChange, onOpenChange: OnOpenChange) {
+  constructor(
+    initialSettings: Settings,
+    onSettingsChange: OnSettingsChange,
+    onOpenChange: OnOpenChange,
+    onToggleInteraction?: OnToggleInteraction,
+    onPrimaryButtonClick?: OnPrimaryButtonClick
+  ) {
     this.settings = { ...initialSettings };
     this.onSettingsChange = onSettingsChange;
     this.onOpenChange = onOpenChange;
+    this.onToggleInteraction = onToggleInteraction;
+    this.onPrimaryButtonClick = onPrimaryButtonClick;
 
     this.toggles = {
       musicEnabled: document.createElement("input"),
@@ -231,6 +243,7 @@ export class SettingsModal {
 
     input.addEventListener("change", () => {
       this.settings = { ...this.settings, [def.key]: input.checked };
+      this.onToggleInteraction?.(def.key, input.checked);
       this.onSettingsChange({ ...this.settings });
     });
 
@@ -267,21 +280,25 @@ export class SettingsModal {
   }
 
   private handleOpenClick = (): void => {
+    this.onPrimaryButtonClick?.();
     this.open();
   };
 
   private handleCloseClick = (): void => {
+    this.onPrimaryButtonClick?.();
     this.close();
   };
 
   private handleBackdropClick = (event: MouseEvent): void => {
     if (event.target === this.backdrop) {
+      this.onPrimaryButtonClick?.();
       this.close();
     }
   };
 
   private handleEscKey = (event: KeyboardEvent): void => {
     if (event.key === "Escape") {
+      this.onPrimaryButtonClick?.();
       this.close();
     }
   };
