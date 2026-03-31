@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BootScene } from "../scenes/BootScene";
 import { GameScene } from "../scenes/GameScene";
+import AmbientMenuScene from "../scenes/AmbientMenuScene";
 
 export function createPhaserGame(parent: HTMLElement): Phaser.Game {
   const renderResolution = Math.min(window.devicePixelRatio || 1, 3);
@@ -10,7 +11,7 @@ export function createPhaserGame(parent: HTMLElement): Phaser.Game {
     parent,
     autoRound: true,
     backgroundColor: "#1a1a2e",
-    scene: [BootScene, GameScene],
+    scene: [BootScene, GameScene, AmbientMenuScene],
     scale: {
       mode: Phaser.Scale.RESIZE,
       width: window.innerWidth,

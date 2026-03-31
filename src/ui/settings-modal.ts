@@ -10,24 +10,20 @@ type OnPrimaryButtonClick = () => void;
 interface ToggleDef {
   key: SettingsKey;
   title: string;
-  description: string;
 }
 
 const TOGGLES: ToggleDef[] = [
   {
     key: "musicEnabled",
     title: "Music",
-    description: "Background music on/off.",
   },
   {
     key: "fxEnabled",
     title: "FX",
-    description: "Sound effects on/off.",
   },
   {
     key: "hapticsEnabled",
     title: "Haptics",
-    description: "Vibration feedback on/off.",
   },
 ];
 
@@ -43,10 +39,14 @@ export class SettingsModal {
   private readonly onPrimaryButtonClick?: OnPrimaryButtonClick;
 
   private readonly button: HTMLButtonElement;
+  private readonly buttonIcon: HTMLImageElement;
   private readonly backdrop: HTMLDivElement;
   private readonly panel: HTMLDivElement;
   private readonly closeButton: HTMLButtonElement;
   private readonly toggles: Record<SettingsKey, HTMLInputElement>;
+  private readonly toggleTracks: Record<SettingsKey, HTMLSpanElement>;
+  private readonly toggleThumbs: Record<SettingsKey, HTMLSpanElement>;
+  private readonly toggleChecks: Record<SettingsKey, HTMLSpanElement>;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
 
   private isOpen = false;
@@ -69,14 +69,29 @@ export class SettingsModal {
       fxEnabled: document.createElement("input"),
       hapticsEnabled: document.createElement("input"),
     };
+    this.toggleTracks = {
+      musicEnabled: document.createElement("span"),
+      fxEnabled: document.createElement("span"),
+      hapticsEnabled: document.createElement("span"),
+    };
+    this.toggleThumbs = {
+      musicEnabled: document.createElement("span"),
+      fxEnabled: document.createElement("span"),
+      hapticsEnabled: document.createElement("span"),
+    };
+    this.toggleChecks = {
+      musicEnabled: document.createElement("span"),
+      fxEnabled: document.createElement("span"),
+      hapticsEnabled: document.createElement("span"),
+    };
 
     this.button = document.createElement("button");
     this.button.type = "button";
-    this.button.textContent = "";
     this.button.setAttribute("aria-label", "Open settings");
     this.button.setAttribute("aria-haspopup", "dialog");
     this.button.setAttribute("aria-expanded", "false");
-    this.button.appendChild(this.createGearIcon());
+    this.buttonIcon = this.createSettingsIcon();
+    this.button.appendChild(this.buttonIcon);
 
     this.backdrop = document.createElement("div");
     applyStyles(this.backdrop, {
@@ -87,7 +102,7 @@ export class SettingsModal {
       alignItems: "center",
       justifyContent: "center",
       background:
-        "radial-gradient(circle at 20% 12%, rgba(76, 178, 255, 0.18), transparent 40%), rgba(0, 0, 0, 0.62)",
+        "radial-gradient(circle at 20% 12%, rgba(245, 159, 149, 0.24), transparent 42%), rgba(72, 46, 40, 0.52)",
       paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
       paddingRight: "calc(env(safe-area-inset-right, 0px) + 12px)",
       paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
@@ -118,25 +133,27 @@ export class SettingsModal {
       lineHeight: "1.1",
       fontWeight: "800",
       letterSpacing: "0.01em",
+      color: "#4a3c31",
     });
 
     this.closeButton = document.createElement("button");
     this.closeButton.type = "button";
-    this.closeButton.textContent = "Close";
     this.closeButton.setAttribute("aria-label", "Close settings");
+    this.closeButton.appendChild(this.createCloseIcon());
     applyStyles(this.closeButton, {
-      border: "1px solid rgba(255,255,255,0.22)",
-      borderRadius: "10px",
-      background: "rgba(255, 255, 255, 0.12)",
-      color: "#ffffff",
-      fontSize: "13px",
-      fontWeight: "700",
-      padding: "0 12px",
+      border: "1px solid rgba(235, 134, 134, 0.3)",
+      borderRadius: "999px",
+      background: "rgba(255, 255, 255, 0.58)",
+      color: "#6b4f45",
       cursor: "pointer",
       touchAction: "manipulation",
-      minHeight: "38px",
+      width: "38px",
+      height: "38px",
       pointerEvents: "auto",
-      transition: "transform 120ms ease",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "transform 120ms ease, filter 120ms ease",
     });
 
     header.append(title, this.closeButton);
@@ -193,27 +210,48 @@ export class SettingsModal {
 
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
+    const viewportWidth =
+      typeof window !== "undefined" ? window.innerWidth : document.documentElement.clientWidth;
+    const stripMargin = metrics.isMobile ? 8 : 12;
+    const stripWidth = Math.max(240, Math.round(viewportWidth - stripMargin * 2));
+    const buttonSize = metrics.isMobile ? 46 : 50;
+    const sideInset = metrics.isMobile ? 10 : 12;
+    const buttonLeft = stripMargin + stripWidth - sideInset - buttonSize;
+    const buttonTopOffset = metrics.isMobile ? 50 : 48;
     applyStyles(this.button, {
       position: "fixed",
-      top: getSafeTopOffsetCss(12),
-      right: `calc(env(safe-area-inset-right, 0px) + ${metrics.edgePaddingPx}px)`,
+      top: getSafeTopOffsetCss(buttonTopOffset),
+      left: `${buttonLeft}px`,
       zIndex: "40",
-      border: "1px solid rgba(255,255,255,0.3)",
-      background: "linear-gradient(180deg, rgba(25, 91, 163, 0.95), rgba(16, 56, 103, 0.96))",
-      color: "#ffffff",
+      border: "none",
+      background: "transparent",
+      color: "#eb8686",
       borderRadius: "999px",
-      fontFamily: "system-ui, sans-serif",
-      fontWeight: "700",
-      fontSize: metrics.isMobile ? "14px" : "13px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
       lineHeight: "1",
-      padding: metrics.isMobile ? "0 14px" : "0 12px",
+      padding: "0",
+      overflow: "hidden",
       cursor: "pointer",
       touchAction: "manipulation",
-      minHeight: `${metrics.buttonHeightPx}px`,
-      minWidth: `${metrics.buttonHeightPx}px`,
+      width: `${buttonSize}px`,
+      height: `${buttonSize}px`,
       pointerEvents: "auto",
-      boxShadow: "0 6px 16px rgba(0, 0, 0, 0.24)",
+      boxShadow: "none",
+      backdropFilter: "none",
       transition: "transform 120ms ease, opacity 120ms ease",
+    });
+    applyStyles(this.buttonIcon, {
+      width: metrics.isMobile ? "30px" : "32px",
+      height: metrics.isMobile ? "30px" : "32px",
+      objectFit: "contain",
+      display: "block",
+      opacity: "0.9",
+    });
+    applyStyles(this.closeButton, {
+      width: metrics.isMobile ? "38px" : "36px",
+      height: metrics.isMobile ? "38px" : "36px",
     });
 
     applyStyles(this.panel, {
@@ -224,14 +262,14 @@ export class SettingsModal {
         ? "calc(100vh - 20px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))"
         : "calc(100vh - 28px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))",
       overflowY: "auto",
-      borderRadius: metrics.isMobile ? "16px" : "14px",
+      borderRadius: metrics.isMobile ? "20px" : "18px",
       background:
-        "linear-gradient(180deg, rgba(24, 36, 70, 0.98), rgba(15, 25, 50, 0.98))",
-      border: "1px solid rgba(255,255,255,0.2)",
-      boxShadow: "0 16px 36px rgba(0, 0, 0, 0.42)",
-      color: "#ffffff",
+        "linear-gradient(180deg, rgba(253, 228, 203, 0.98), rgba(251, 203, 183, 0.98))",
+      border: "1px solid rgba(255,255,255,0.34)",
+      boxShadow: "0 16px 36px rgba(100, 65, 54, 0.28)",
+      color: "#4a3c31",
       padding: metrics.isMobile ? "18px 16px 14px" : "16px",
-      fontFamily: "system-ui, sans-serif",
+      fontFamily: "\"Plus Jakarta Sans\", system-ui, sans-serif",
       pointerEvents: "auto",
     });
   }
@@ -245,70 +283,141 @@ export class SettingsModal {
       alignItems: "center",
       justifyContent: "space-between",
       gap: "12px",
-      borderRadius: "12px",
-      background: "rgba(255,255,255,0.06)",
-      border: "1px solid rgba(255,255,255,0.14)",
-      padding: metrics.isMobile ? "13px 12px" : "12px",
+      borderRadius: "16px",
+      background: "rgba(255,255,255,0.52)",
+      border: "1px solid rgba(255,255,255,0.35)",
+      padding: metrics.isMobile ? "14px 12px" : "13px 12px",
       marginBottom: "10px",
       cursor: "pointer",
     });
-
-    const textWrap = document.createElement("div");
 
     const title = document.createElement("div");
     title.textContent = def.title;
     applyStyles(title, {
       fontSize: metrics.isMobile ? "16px" : "15px",
       fontWeight: "700",
-      marginBottom: "3px",
       lineHeight: "1.2",
+      color: "#4a3c31",
     });
-
-    const desc = document.createElement("div");
-    desc.textContent = def.description;
-    applyStyles(desc, {
-      fontSize: metrics.isMobile ? "12px" : "11px",
-      color: "rgba(255,255,255,0.76)",
-      lineHeight: "1.3",
-    });
-
-    textWrap.append(title, desc);
 
     const input = this.toggles[def.key];
     input.type = "checkbox";
     input.id = `settings-${def.key}`;
     input.setAttribute("aria-label", def.title);
     applyStyles(input, {
-      width: metrics.isMobile ? "24px" : "22px",
-      height: metrics.isMobile ? "24px" : "22px",
-      margin: "0",
-      cursor: "pointer",
-      accentColor: "#49c56e",
+      position: "absolute",
+      opacity: "0",
+      width: "1px",
+      height: "1px",
+      pointerEvents: "none",
+    });
+
+    const track = this.toggleTracks[def.key];
+    applyStyles(track, {
+      position: "relative",
+      width: metrics.isMobile ? "56px" : "54px",
+      height: metrics.isMobile ? "32px" : "30px",
+      borderRadius: "999px",
+      border: "1px solid rgba(235, 134, 134, 0.34)",
+      background: "rgba(255,255,255,0.64)",
       flexShrink: "0",
+      transition: "background-color 140ms ease, border-color 140ms ease",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.44)",
+    });
+
+    const thumb = this.toggleThumbs[def.key];
+    applyStyles(thumb, {
+      position: "absolute",
+      top: "50%",
+      left: "3px",
+      width: metrics.isMobile ? "26px" : "24px",
+      height: metrics.isMobile ? "26px" : "24px",
+      borderRadius: "999px",
+      background: "#ffffff",
+      transform: "translate(0, -50%)",
+      transition: "transform 140ms ease, background-color 140ms ease",
+      boxShadow: "0 2px 5px rgba(107, 79, 69, 0.24)",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "#eb8686",
+    });
+
+    const check = this.toggleChecks[def.key];
+    check.textContent = "✓";
+    applyStyles(check, {
+      fontSize: metrics.isMobile ? "14px" : "13px",
+      fontWeight: "800",
+      lineHeight: "1",
+      opacity: "0",
+      transition: "opacity 120ms ease",
+    });
+
+    thumb.appendChild(check);
+    track.appendChild(thumb);
+
+    track.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      input.checked = !input.checked;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    track.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        input.checked = !input.checked;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    row.tabIndex = 0;
+    applyStyles(row, {
+      outline: "none",
+    });
+
+    applyStyles(track, {
+      cursor: "pointer",
     });
 
     input.addEventListener("change", () => {
       this.settings = { ...this.settings, [def.key]: input.checked };
+      this.applyToggleVisualState(def.key, input.checked);
       this.onToggleInteraction?.(def.key, input.checked);
       this.onSettingsChange({ ...this.settings });
     });
 
-    row.append(textWrap, input);
+    this.applyToggleVisualState(def.key, input.checked);
+    row.append(title, input, track);
     return row;
   }
 
-  private createGearIcon(): SVGElement {
+  private createSettingsIcon(): HTMLImageElement {
+    const image = document.createElement("img");
+    image.src = "/assets/icons/settings-clean.png";
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    image.decoding = "async";
+    return image;
+  }
+
+  private createCloseIcon(): SVGElement {
     const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     icon.setAttribute("viewBox", "0 0 24 24");
-    icon.setAttribute("width", "18");
-    icon.setAttribute("height", "18");
+    icon.setAttribute("width", "16");
+    icon.setAttribute("height", "16");
     icon.setAttribute("aria-hidden", "true");
     icon.style.display = "block";
 
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute(
       "d",
-      "M19.4 13a7.3 7.3 0 0 0 .1-1 7.3 7.3 0 0 0-.1-1l2-1.5-1.9-3.2-2.3.9a7.2 7.2 0 0 0-1.7-1l-.3-2.5h-3.8l-.3 2.5a7.2 7.2 0 0 0-1.7 1l-2.3-.9-1.9 3.2 2 1.5a7.3 7.3 0 0 0-.1 1 7.3 7.3 0 0 0 .1 1l-2 1.5 1.9 3.2 2.3-.9c.5.4 1.1.7 1.7 1l.3 2.5h3.8l.3-2.5c.6-.3 1.2-.6 1.7-1l2.3.9 1.9-3.2-2-1.5zM12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4z"
+      "M6.7 5.3L12 10.6l5.3-5.3 1.4 1.4L13.4 12l5.3 5.3-1.4 1.4L12 13.4l-5.3 5.3-1.4-1.4L10.6 12 5.3 6.7z"
     );
     path.setAttribute("fill", "currentColor");
     icon.appendChild(path);
@@ -319,6 +428,31 @@ export class SettingsModal {
     this.toggles.musicEnabled.checked = settings.musicEnabled;
     this.toggles.fxEnabled.checked = settings.fxEnabled;
     this.toggles.hapticsEnabled.checked = settings.hapticsEnabled;
+    this.applyToggleVisualState("musicEnabled", settings.musicEnabled);
+    this.applyToggleVisualState("fxEnabled", settings.fxEnabled);
+    this.applyToggleVisualState("hapticsEnabled", settings.hapticsEnabled);
+  }
+
+  private applyToggleVisualState(key: SettingsKey, checked: boolean): void {
+    const track = this.toggleTracks[key];
+    const thumb = this.toggleThumbs[key];
+    const check = this.toggleChecks[key];
+    if (checked) {
+      track.style.background = "linear-gradient(140deg, rgba(245, 159, 149, 0.84), rgba(235, 134, 134, 0.92))";
+      track.style.borderColor = "rgba(226, 119, 119, 0.78)";
+      thumb.style.transform = "translate(24px, -50%)";
+      thumb.style.background = "rgba(255,255,255,0.96)";
+      check.style.opacity = "1";
+      check.style.color = "#d96f6f";
+      return;
+    }
+
+    track.style.background = "rgba(255,255,255,0.64)";
+    track.style.borderColor = "rgba(235, 134, 134, 0.34)";
+    thumb.style.transform = "translate(0, -50%)";
+    thumb.style.background = "#ffffff";
+    check.style.opacity = "0";
+    check.style.color = "#eb8686";
   }
 
   private openPanel(): void {

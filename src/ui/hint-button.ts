@@ -8,15 +8,21 @@ function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>):
 
 export class HintButton {
   private readonly button: HTMLButtonElement;
+  private readonly iconImage: HTMLImageElement;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
   private visible = true;
 
   constructor(onClick: HintClickHandler) {
     this.button = document.createElement("button");
     this.button.type = "button";
-    this.button.textContent = "Hint";
     this.button.setAttribute("aria-label", "Show a valid match hint");
     this.button.setAttribute("title", "Show hint");
+    this.iconImage = document.createElement("img");
+    this.iconImage.src = "/assets/icons/magnifying-glass-clean.png";
+    this.iconImage.alt = "";
+    this.iconImage.setAttribute("aria-hidden", "true");
+    this.iconImage.decoding = "async";
+    this.button.appendChild(this.iconImage);
 
     this.applyResponsiveStyles();
 
@@ -57,37 +63,60 @@ export class HintButton {
 
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
+    const viewportWidth =
+      typeof window !== "undefined" ? window.innerWidth : document.documentElement.clientWidth;
+    const stripMargin = metrics.isMobile ? 8 : 12;
+    const stripWidth = Math.max(240, Math.round(viewportWidth - stripMargin * 2));
+    const buttonSize = metrics.isMobile ? 46 : 50;
+    const sideInset = metrics.isMobile ? 10 : 12;
+    const buttonLeft = stripMargin + sideInset;
+    const buttonTopOffset = metrics.isMobile ? 50 : 48;
 
     applyStyles(this.button, {
       position: "fixed",
-      top: getSafeTopOffsetCss(12),
-      left: `calc(env(safe-area-inset-left, 0px) + ${metrics.edgePaddingPx}px)`,
+      top: getSafeTopOffsetCss(buttonTopOffset),
+      left: `${buttonLeft}px`,
       zIndex: "40",
-      border: "1px solid rgba(255,255,255,0.3)",
-      background: "linear-gradient(180deg, rgba(25, 91, 163, 0.95), rgba(16, 56, 103, 0.96))",
-      color: "#ffffff",
+      border: "none",
+      background: "transparent",
+      color: "#eb8686",
       borderRadius: "999px",
-      fontFamily: "system-ui, sans-serif",
-      fontWeight: "700",
-      fontSize: metrics.isMobile ? "14px" : "13px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
       lineHeight: "1",
-      padding: metrics.isMobile ? "0 16px" : "0 14px",
+      padding: "0",
+      overflow: "hidden",
       cursor: "pointer",
       touchAction: "manipulation",
-      minHeight: `${metrics.buttonHeightPx}px`,
-      minWidth: metrics.isMobile ? "78px" : "68px",
+      width: `${buttonSize}px`,
+      height: `${buttonSize}px`,
       pointerEvents: "auto",
-      boxShadow: "0 6px 16px rgba(0, 0, 0, 0.24)",
-      textShadow: "0 1px 0 rgba(0,0,0,0.35)",
-      transition: "transform 120ms ease, opacity 120ms ease, box-shadow 120ms ease",
+      boxShadow: "none",
+      backdropFilter: "none",
+      transition: "transform 120ms ease, opacity 120ms ease, box-shadow 120ms ease, filter 120ms ease",
+    });
+
+    applyStyles(this.iconImage, {
+      width: metrics.isMobile ? "30px" : "32px",
+      height: metrics.isMobile ? "30px" : "32px",
+      objectFit: "contain",
+      display: "block",
+      position: "absolute",
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+      opacity: "0.9",
     });
   }
 
   private handlePressDown = (): void => {
-    this.button.style.transform = "scale(0.97)";
+    this.button.style.transform = "scale(0.96)";
+    this.button.style.filter = "brightness(0.98)";
   };
 
   private handlePressUp = (): void => {
     this.button.style.transform = "scale(1)";
+    this.button.style.filter = "brightness(1)";
   };
 }

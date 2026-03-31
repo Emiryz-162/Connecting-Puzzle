@@ -1,4 +1,4 @@
-﻿import Phaser from "phaser";
+import Phaser from "phaser";
 // app.ts
 // Main orchestration: loop, state transitions, match pipeline, HUD and overlays.
 
@@ -1364,6 +1364,7 @@ export class GameScene extends Phaser.Scene {
   private pauseForStartScreen(): void {
     this.gameState.phase = "paused";
     this.gameState.selectedTile = null;
+    this.scene.launch('AmbientMenuScene', { theme: this.activeTheme });
     this.startScreen.show();
     this.setSceneInputEnabled(false);
   }
@@ -1376,6 +1377,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.scene.stop('AmbientMenuScene');
     this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
     this.startScreen.hide();
     if (this.gameState.phase === "paused") {
