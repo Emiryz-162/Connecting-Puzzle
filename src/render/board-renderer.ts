@@ -38,9 +38,10 @@ export function calculateLayout(
   const isMobile =
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   const layoutPadding = isMobile ? Math.max(8, BOARD_PADDING - 6) : BOARD_PADDING;
-  const topReserved = isMobile ? Math.max(68, HUD_HEIGHT + 8) : HUD_HEIGHT;
+  const topReserved = isMobile ? Math.max(58, HUD_HEIGHT + 2) : Math.max(50, HUD_HEIGHT - 2);
+  const bottomReserved = isMobile ? 10 : 6;
   const availW = displayW - layoutPadding * 2;
-  const availH = displayH - topReserved - layoutPadding * 2;
+  const availH = displayH - topReserved - bottomReserved - layoutPadding * 2;
   const boardArea = boardW * boardH;
   const baseCell = Math.min(availW / boardW, availH / boardH);
 
@@ -49,7 +50,7 @@ export function calculateLayout(
   let densityScale = 1;
   if (isMobile) {
     const overflowCells = Math.max(0, boardArea - 24);
-    densityScale = Math.max(0.76, 1 - overflowCells * 0.0085);
+    densityScale = Math.max(0.82, 1 - overflowCells * 0.0065);
   }
 
   const rawCellSize = baseCell * densityScale;
@@ -57,7 +58,10 @@ export function calculateLayout(
   const totalW = cellSize * boardW;
   const totalH = cellSize * boardH;
   const offsetX = Math.round((displayW - totalW) / 2);
-  const offsetY = Math.round(topReserved + layoutPadding + (availH - totalH) / 2);
+  const baseOffsetY = Math.round(topReserved + layoutPadding + (availH - totalH) / 2);
+  const downwardShift = isMobile ? 60 : 36;
+  const maxOffsetY = Math.round(displayH - bottomReserved - layoutPadding - totalH);
+  const offsetY = Math.min(maxOffsetY, baseOffsetY + downwardShift);
   return { offsetX, offsetY, cellSize };
 }
 

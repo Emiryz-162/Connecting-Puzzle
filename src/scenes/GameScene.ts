@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 // app.ts
 // Main orchestration: loop, state transitions, match pipeline, HUD and overlays.
 
