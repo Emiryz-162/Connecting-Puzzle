@@ -22,6 +22,15 @@ export class LevelProgression {
     return this.currentIndex;
   }
 
+  setCurrentLevelById(levelId: number): LevelDef | null {
+    const nextIndex = this.levels.findIndex((level) => level.id === levelId);
+    if (nextIndex < 0) {
+      return null;
+    }
+    this.currentIndex = nextIndex;
+    return this.getCurrentLevel();
+  }
+
   getTotalLevels(): number {
     return this.levels.length;
   }

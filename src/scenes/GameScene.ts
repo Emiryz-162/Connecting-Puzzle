@@ -26,6 +26,7 @@ import {
 } from "../render/board-renderer";
 import { LEVELS } from "../levels/level-data";
 import { LevelProgression } from "../levels/progression";
+import { LevelProgressStore } from "../levels/progress-store";
 import { SettingsStore } from "../settings/store";
 import { SettingsModal } from "../ui/settings-modal";
 import { HintButton } from "../ui/hint-button";
@@ -50,7 +51,7 @@ import {
 } from "../constants";
 
 // Test helper: change this to start directly from a specific level id (1..30).
-const START_LEVEL_ID_FOR_TESTING = 30;
+const START_LEVEL_ID_FOR_TESTING = 1;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
 
 interface MergePullAnimation {
@@ -104,6 +105,7 @@ export class GameScene extends Phaser.Scene {
   private layout!: BoardLayout;
 
   private progression = new LevelProgression(LEVELS, START_LEVEL_ID);
+  private levelProgressStore!: LevelProgressStore;
   private campaignCompleted = false;
   private runScore = 0;
   private runScoreSubmitted = false;
@@ -153,6 +155,10 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.settingsStore = new SettingsStore();
     this.settings = this.settingsStore.get();
+    this.levelProgressStore = new LevelProgressStore(
+      this.progression.getTotalLevels(),
+      START_LEVEL_ID
+    );
     this.audio = new AudioManager(this.settings.fxEnabled, this.settings.musicEnabled);
     this.settingsModal = new SettingsModal(
       this.settings,
@@ -161,7 +167,6 @@ export class GameScene extends Phaser.Scene {
         if (previousSettings.fxEnabled !== next.fxEnabled) {
           if (next.fxEnabled) {
             this.audio.setFxEnabled(true);
-            this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
             this.audio.play(GAME_SOUNDS.SETTINGS_TOGGLE_ON);
           }
         }
@@ -178,7 +183,6 @@ export class GameScene extends Phaser.Scene {
         }
       },
       (_key, value) => {
-        this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
         this.audio.play(value ? GAME_SOUNDS.SETTINGS_TOGGLE_ON : GAME_SOUNDS.SETTINGS_TOGGLE_OFF);
       },
       () => {
@@ -192,7 +196,9 @@ export class GameScene extends Phaser.Scene {
     this.homeButton = new HomeButton(() => this.handleHomeButtonClick());
     this.startScreen = new StartScreen(
       () => this.handleStartScreenPlay(),
-      () => this.handleStartScreenSettings()
+      () => this.handleStartScreenSettings(),
+      (levelId) => this.handleStartScreenLevelSelect(levelId),
+      () => this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY)
     );
     this.hudOverlay = new HudOverlay();
     this.resultOverlay = new ResultOverlay();
@@ -346,6 +352,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.recalculateLayout();
+    this.syncStartScreenLevelSelectionState();
   }
 
   /** Build a board and guarantee at least one valid move at start. */
@@ -790,6 +797,7 @@ export class GameScene extends Phaser.Scene {
     const remaining = countRemainingTiles(this.gameState.board);
     if (remaining === 0) {
       this.applyLevelWinProgress();
+      this.levelProgressStore.markLevelCompleted(this.gameState.levelId);
       this.gameState.phase = "won";
       this.campaignCompleted = this.progression.isLastLevel();
       this.audio.play(
@@ -1404,6 +1412,7 @@ export class GameScene extends Phaser.Scene {
   private pauseForStartScreen(): void {
     this.gameState.phase = "paused";
     this.gameState.selectedTile = null;
+    this.syncStartScreenLevelSelectionState();
     this.scene.launch('AmbientMenuScene', { theme: this.activeTheme });
     this.startScreen.show();
     this.setSceneInputEnabled(false);
@@ -1433,6 +1442,28 @@ export class GameScene extends Phaser.Scene {
     this.triggerHaptic("light");
   }
 
+  private handleStartScreenLevelSelect(levelId: number): void {
+    if (!this.startScreen.isVisible() || this.settingsOpen) {
+      return;
+    }
+
+    if (levelId > this.getUnlockedThroughLevelId()) {
+      return;
+    }
+
+    const selected = this.progression.setCurrentLevelById(levelId);
+    if (!selected) {
+      return;
+    }
+
+    this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+    this.scene.stop('AmbientMenuScene');
+    this.initLevel(selected, false);
+    this.startScreen.hide();
+    this.setSceneInputEnabled(!this.settingsOpen);
+    this.triggerHaptic("light");
+  }
+
   private handleHomeButtonClick(): void {
     if (this.startScreen.isVisible()) {
       return;
@@ -1449,6 +1480,29 @@ export class GameScene extends Phaser.Scene {
     this.pathDisplayTimer = 0;
     this.pauseForStartScreen();
     this.triggerHaptic("light");
+  }
+
+  private getUnlockedThroughLevelId(): number {
+    const totalLevels = this.progression.getTotalLevels();
+    const baseline = Math.max(1, Math.min(totalLevels, START_LEVEL_ID));
+    if (!this.levelProgressStore) {
+      return baseline;
+    }
+    return Math.max(
+      baseline,
+      Math.min(totalLevels, this.levelProgressStore.getHighestUnlockedLevel())
+    );
+  }
+
+  private syncStartScreenLevelSelectionState(): void {
+    if (!this.startScreen) {
+      return;
+    }
+    this.startScreen.setLevelSelectionState({
+      unlockedThroughLevel: this.getUnlockedThroughLevelId(),
+      currentLevel: this.gameState?.levelId ?? this.progression.getCurrentLevel().id,
+      totalLevels: this.progression.getTotalLevels(),
+    });
   }
 
   private findInitialKeyboardCursor(board: BoardState): Coord {
