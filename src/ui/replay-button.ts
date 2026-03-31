@@ -56,6 +56,17 @@ export class ReplayButton {
     this.button.remove();
   }
 
+  getBounds(): DOMRect | null {
+    if (!this.visible || this.button.style.display === "none") {
+      return null;
+    }
+    const rect = this.button.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+    return rect;
+  }
+
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
     const viewportWidth =

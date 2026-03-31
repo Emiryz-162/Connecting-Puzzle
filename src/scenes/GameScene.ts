@@ -101,7 +101,7 @@ const TUTORIAL_SCRIPT: TutorialScriptStep[] = [
   {
     id: "hud-buttons",
     message:
-      "Quick controls: Home returns to main menu, Hint reveals a match, Settings opens options.",
+      "Quick controls: Home returns to main menu, Hint reveals a match, Replay restarts the level, and Settings opens options.",
     placement: "bottom",
     tapToContinue: true,
     highlightButtons: true,
@@ -1164,7 +1164,9 @@ export class GameScene extends Phaser.Scene {
     );
     this.hintButton.setVisible(!this.startScreen.isVisible());
     this.homeButton.setVisible(!this.startScreen.isVisible());
-    this.replayButton.setVisible(!this.startScreen.isVisible() && !this.tutorialEnabled);
+    const tutorialButtonsStepActive =
+      this.tutorialEnabled && this.getCurrentTutorialStep()?.id === "hud-buttons";
+    this.replayButton.setVisible(!this.startScreen.isVisible() && (!this.tutorialEnabled || tutorialButtonsStepActive));
     this.settingsModal.setTriggerEnabled(!this.startScreen.isVisible() && !this.tutorialEnabled);
 
     this.updateHudOverlay();
@@ -1558,12 +1560,16 @@ export class GameScene extends Phaser.Scene {
     if (step.highlightButtons) {
       const homeRect = this.homeButton.getBounds();
       const hintRect = this.hintButton.getBounds();
+      const replayRect = this.replayButton.getBounds();
       const settingsRect = this.settingsModal.getTriggerButtonBounds();
       if (homeRect) {
         spotlights.push(this.rectToTutorialSpotlight(homeRect, 8, 16));
       }
       if (hintRect) {
         spotlights.push(this.rectToTutorialSpotlight(hintRect, 8, 16));
+      }
+      if (replayRect) {
+        spotlights.push(this.rectToTutorialSpotlight(replayRect, 8, 16));
       }
       if (settingsRect) {
         spotlights.push(this.rectToTutorialSpotlight(settingsRect, 8, 16));
