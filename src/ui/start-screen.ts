@@ -4,6 +4,7 @@ import "./start-screen.css";
 type OnStart = () => void;
 type OnOpenSettings = () => void;
 type OnSelectLevel = (levelId: number) => void;
+type OnOpenTutorial = () => void;
 type OnUiClick = () => void;
 
 interface LevelSelectState {
@@ -32,6 +33,7 @@ export class StartScreen {
   private readonly subtitle: HTMLParagraphElement;
   private readonly playButton: HTMLButtonElement;
   private readonly sectionsButton: HTMLButtonElement;
+  private readonly tutorialButton: HTMLButtonElement;
   private readonly settingsButton: HTMLButtonElement;
   private readonly nowPlayingCard: HTMLDivElement;
 
@@ -51,6 +53,7 @@ export class StartScreen {
   private readonly onStart: OnStart;
   private readonly onOpenSettings: OnOpenSettings;
   private readonly onSelectLevel: OnSelectLevel;
+  private readonly onOpenTutorial: OnOpenTutorial;
   private readonly onUiClick?: OnUiClick;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
   private visible = false;
@@ -59,11 +62,13 @@ export class StartScreen {
     onStart: OnStart,
     onOpenSettings: OnOpenSettings,
     onSelectLevel: OnSelectLevel,
+    onOpenTutorial: OnOpenTutorial,
     onUiClick?: OnUiClick
   ) {
     this.onStart = onStart;
     this.onOpenSettings = onOpenSettings;
     this.onSelectLevel = onSelectLevel;
+    this.onOpenTutorial = onOpenTutorial;
     this.onUiClick = onUiClick;
 
     this.root = document.createElement("div");
@@ -101,6 +106,13 @@ export class StartScreen {
     this.sectionsButton.setAttribute("aria-label", "Open levels");
     this.sectionsButton.append(this.createGridIcon(), this.createButtonLabel("LEVELS"));
 
+    this.tutorialButton = document.createElement("button");
+    this.tutorialButton.className = "sections-btn tutorial-menu-btn";
+    this.tutorialButton.type = "button";
+    this.tutorialButton.setAttribute("aria-label", "Open tutorial");
+    this.tutorialButton.setAttribute("title", "Tutorial");
+    this.tutorialButton.append(this.createTutorialIcon(), this.createButtonLabel("TUTORIAL"));
+
     this.settingsButton = document.createElement("button");
     this.settingsButton.className = "sections-btn settings-menu-btn";
     this.settingsButton.type = "button";
@@ -110,7 +122,7 @@ export class StartScreen {
 
     const actionArea = document.createElement("div");
     actionArea.className = "menu-actions";
-    actionArea.append(this.playButton, this.sectionsButton, this.settingsButton);
+    actionArea.append(this.playButton, this.sectionsButton, this.tutorialButton, this.settingsButton);
 
     this.nowPlayingCard = document.createElement("div");
     this.nowPlayingCard.className = "now-playing-card";
@@ -201,12 +213,14 @@ export class StartScreen {
 
     this.playButton.addEventListener("click", this.handleStartClick);
     this.sectionsButton.addEventListener("click", this.handleSectionsClick);
+    this.tutorialButton.addEventListener("click", this.handleTutorialClick);
     this.settingsButton.addEventListener("click", this.handleSettingsClick);
     this.sectionsCloseButton.addEventListener("click", this.handleSectionsCloseClick);
     this.sectionsOverlay.addEventListener("click", this.handleSectionsBackdropClick);
 
     this.playButton.addEventListener("pointerdown", () => this.triggerHaptic("heavy"));
     this.sectionsButton.addEventListener("pointerdown", () => this.triggerHaptic("light"));
+    this.tutorialButton.addEventListener("pointerdown", () => this.triggerHaptic("light"));
     this.settingsButton.addEventListener("pointerdown", () => this.triggerHaptic("light"));
 
     document.addEventListener("keydown", this.handleKeyDown);
@@ -263,6 +277,7 @@ export class StartScreen {
   destroy(): void {
     this.playButton.removeEventListener("click", this.handleStartClick);
     this.sectionsButton.removeEventListener("click", this.handleSectionsClick);
+    this.tutorialButton.removeEventListener("click", this.handleTutorialClick);
     this.settingsButton.removeEventListener("click", this.handleSettingsClick);
     this.sectionsCloseButton.removeEventListener("click", this.handleSectionsCloseClick);
     this.sectionsOverlay.removeEventListener("click", this.handleSectionsBackdropClick);
@@ -281,6 +296,8 @@ export class StartScreen {
     this.playButton.style.fontSize = metrics.isMobile ? "30px" : "34px";
     this.sectionsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
     this.sectionsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
+    this.tutorialButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
+    this.tutorialButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
     this.settingsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
     this.settingsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
     this.content.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${metrics.isMobile ? 32 : 42}px)`;
@@ -408,6 +425,19 @@ export class StartScreen {
     return svg;
   }
 
+  private createTutorialIcon(): SVGElement {
+    const svg = this.createBaseIcon(30, 30);
+    svg.setAttribute("viewBox", "0 0 24 24");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute(
+      "d",
+      "M12 2l2.4 4.86 5.36.78-3.88 3.78.92 5.34L12 14.9 7.2 16.76l.92-5.34L4.24 7.64l5.36-.78L12 2z"
+    );
+    path.setAttribute("fill", "currentColor");
+    svg.appendChild(path);
+    return svg;
+  }
+
   private createSettingsImageIcon(): HTMLImageElement {
     const image = document.createElement("img");
     image.src = "/assets/icons/settings-clean.png";
@@ -459,6 +489,13 @@ export class StartScreen {
       return;
     }
     this.openSections();
+  };
+
+  private handleTutorialClick = (): void => {
+    if (this.sectionsOpen) {
+      this.closeSections();
+    }
+    this.onOpenTutorial();
   };
 
   private handleSectionsCloseClick = (): void => {

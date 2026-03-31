@@ -1,29 +1,30 @@
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
 
-type HomeClickHandler = () => void;
+type ReplayClickHandler = () => void;
 
 function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>): void {
   Object.assign(element.style, style);
 }
 
-export class HomeButton {
+export class ReplayButton {
   private readonly button: HTMLButtonElement;
   private readonly iconImage: HTMLImageElement;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
   private visible = true;
 
-  constructor(onClick: HomeClickHandler) {
+  constructor(onClick: ReplayClickHandler) {
     this.button = document.createElement("button");
     this.button.type = "button";
-    this.button.setAttribute("aria-label", "Return to main menu");
-    this.button.setAttribute("title", "Main menu");
+    this.button.setAttribute("aria-label", "Restart level");
+    this.button.setAttribute("title", "Restart level");
 
     this.iconImage = document.createElement("img");
-    this.iconImage.src = "/assets/icons/home.png";
+    this.iconImage.src = "/assets/icons/replay.png";
     this.iconImage.alt = "";
     this.iconImage.setAttribute("aria-hidden", "true");
     this.iconImage.decoding = "async";
     this.button.appendChild(this.iconImage);
+    void this.makeIconBackgroundTransparent();
 
     this.applyResponsiveStyles();
 
@@ -43,7 +44,7 @@ export class HomeButton {
     }
 
     this.visible = visible;
-    this.button.style.display = visible ? "block" : "none";
+    this.button.style.display = visible ? "flex" : "none";
   }
 
   destroy(): void {
@@ -55,17 +56,6 @@ export class HomeButton {
     this.button.remove();
   }
 
-  getBounds(): DOMRect | null {
-    if (!this.visible || this.button.style.display === "none") {
-      return null;
-    }
-    const rect = this.button.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
-      return null;
-    }
-    return rect;
-  }
-
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
     const viewportWidth =
@@ -74,12 +64,15 @@ export class HomeButton {
     const stripWidth = Math.max(240, Math.round(viewportWidth - stripMargin * 2));
     const buttonSize = metrics.isMobile ? 46 : 50;
     const sideInset = metrics.isMobile ? 10 : 12;
-    const buttonLeft = stripMargin + sideInset;
     const buttonTopOffset = metrics.isMobile ? 50 : 48;
+    const stackGap = metrics.isMobile ? 8 : 10;
+    const buttonLeft = stripMargin + stripWidth - sideInset - buttonSize;
+    const settingsTopCss = getSafeTopOffsetCss(buttonTopOffset);
+    const replayTopCss = `calc(${settingsTopCss} + ${buttonSize + stackGap}px)`;
 
     applyStyles(this.button, {
       position: "fixed",
-      top: getSafeTopOffsetCss(buttonTopOffset),
+      top: replayTopCss,
       left: `${buttonLeft}px`,
       zIndex: "40",
       border: "none",
@@ -108,7 +101,7 @@ export class HomeButton {
       left: "50%",
       top: "50%",
       transform: "translate(-50%, -50%)",
-      opacity: "0.9",
+      opacity: "0.95",
     });
   }
 
@@ -121,4 +114,52 @@ export class HomeButton {
     this.button.style.transform = "scale(1)";
     this.button.style.filter = "brightness(1)";
   };
+
+  private async makeIconBackgroundTransparent(): Promise<void> {
+    try {
+      const image = await this.loadImage("/assets/icons/replay.png");
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return;
+      }
+
+      ctx.drawImage(image, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const bgR = data[0];
+      const bgG = data[1];
+      const bgB = data[2];
+      const threshold = 22;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        if (
+          Math.abs(r - bgR) <= threshold &&
+          Math.abs(g - bgG) <= threshold &&
+          Math.abs(b - bgB) <= threshold
+        ) {
+          data[i + 3] = 0;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      this.iconImage.src = canvas.toDataURL("image/png");
+    } catch {
+      // If icon processing fails, fallback to original file.
+    }
+  }
+
+  private loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Replay icon could not be loaded."));
+      image.src = src;
+    });
+  }
 }

@@ -200,6 +200,20 @@ export class SettingsModal {
     this.backdrop.remove();
   }
 
+  getTriggerButtonBounds(): DOMRect | null {
+    const rect = this.button.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+    return rect;
+  }
+
+  setTriggerEnabled(enabled: boolean): void {
+    this.button.disabled = !enabled;
+    this.button.style.pointerEvents = enabled ? "auto" : "none";
+    this.button.style.opacity = enabled ? "1" : "0.5";
+  }
+
   openFromExternalTrigger(): void {
     this.openPanel();
   }

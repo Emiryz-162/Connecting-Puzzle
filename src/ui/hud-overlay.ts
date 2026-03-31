@@ -22,6 +22,9 @@ function clamp01(value: number): number {
 
 export class HudOverlay {
   private readonly root: HTMLDivElement;
+  private readonly rowTop: HTMLDivElement;
+  private readonly timerRow: HTMLDivElement;
+  private readonly xpRow: HTMLDivElement;
   private readonly timerFill: HTMLDivElement;
   private readonly timerText: HTMLDivElement;
   private readonly levelText: HTMLDivElement;
@@ -37,8 +40,8 @@ export class HudOverlay {
     this.root = document.createElement("div");
     this.root.setAttribute("aria-hidden", "true");
 
-    const rowTop = document.createElement("div");
-    applyStyles(rowTop, {
+    this.rowTop = document.createElement("div");
+    applyStyles(this.rowTop, {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
@@ -80,10 +83,10 @@ export class HudOverlay {
       color: "#eb8686",
       border: "1px solid rgba(235, 134, 134, 0.28)",
     });
-    rowTop.append(this.levelText, this.scoreText);
+    this.rowTop.append(this.levelText, this.scoreText);
 
-    const timerRow = document.createElement("div");
-    applyStyles(timerRow, {
+    this.timerRow = document.createElement("div");
+    applyStyles(this.timerRow, {
       display: "flex",
       alignItems: "center",
       gap: "8px",
@@ -124,10 +127,10 @@ export class HudOverlay {
       border: "1px solid rgba(235, 134, 134, 0.24)",
       padding: "4px 8px",
     });
-    timerRow.append(timerTrack, this.timerText);
+    this.timerRow.append(timerTrack, this.timerText);
 
-    const xpRow = document.createElement("div");
-    applyStyles(xpRow, {
+    this.xpRow = document.createElement("div");
+    applyStyles(this.xpRow, {
       display: "flex",
       alignItems: "center",
       gap: "8px",
@@ -153,7 +156,7 @@ export class HudOverlay {
     xpTrack.appendChild(this.xpFill);
 
     this.xpText = document.createElement("div");
-    this.xpText.textContent = "XP 0/150 | Rewards 0";
+    this.xpText.textContent = "XP 0/150";
     applyStyles(this.xpText, {
       minWidth: "132px",
       textAlign: "right",
@@ -168,9 +171,9 @@ export class HudOverlay {
       background: "rgba(255,255,255,0.42)",
       border: "1px solid rgba(235, 134, 134, 0.2)",
     });
-    xpRow.append(xpTrack, this.xpText);
+    this.xpRow.append(xpTrack, this.xpText);
 
-    this.root.append(rowTop, timerRow, xpRow);
+    this.root.append(this.rowTop, this.timerRow, this.xpRow);
     document.body.appendChild(this.root);
     this.applyResponsiveStyles();
 
@@ -234,6 +237,38 @@ export class HudOverlay {
       document.documentElement.style.removeProperty("--cp-hud-bottom");
     }
     this.root.remove();
+  }
+
+  getElementBounds(kind: "level" | "score" | "timer" | "xp"): DOMRect | null {
+    if (!this.visible || this.root.style.display === "none") {
+      return null;
+    }
+
+    const node =
+      kind === "level"
+        ? this.levelText
+        : kind === "score"
+          ? this.scoreText
+          : kind === "timer"
+            ? this.timerRow
+            : this.xpRow;
+
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+    return rect;
+  }
+
+  getContainerBounds(): DOMRect | null {
+    if (!this.visible || this.root.style.display === "none") {
+      return null;
+    }
+    const rect = this.root.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+    return rect;
   }
 
   private applyResponsiveStyles(): void {

@@ -5,6 +5,7 @@
 import {
   BoardLayout,
   BoardState,
+  Cell,
   CellKind,
   Coord,
   GameState,
@@ -31,12 +32,19 @@ import { SettingsStore } from "../settings/store";
 import { SettingsModal } from "../ui/settings-modal";
 import { HintButton } from "../ui/hint-button";
 import { HomeButton } from "../ui/home-button";
+import { ReplayButton } from "../ui/replay-button";
 import { StartScreen } from "../ui/start-screen";
 import { HudOverlay } from "../ui/hud-overlay";
 import { ResultOverlay } from "../ui/result-overlay";
 import { HintFeedbackOverlay } from "../ui/hint-feedback-overlay";
+import {
+  TutorialCircleSpotlight,
+  TutorialOverlay,
+  TutorialRectSpotlight,
+} from "../ui/tutorial-overlay";
 import { AudioManager, GAME_SOUNDS } from "../audio/audio-manager";
 import { submitOasizScore, triggerOasizHaptic } from "../platform/oasiz";
+import { TutorialProgressStore } from "../tutorial/tutorial-progress-store";
 import {
   ALL_TILE_THEME_DEFINITIONS,
   TileThemeId,
@@ -53,6 +61,112 @@ import {
 // Test helper: change this to start directly from a specific level id (1..30).
 const START_LEVEL_ID_FOR_TESTING = 1;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
+const MATCH_SCORE_PER_PAIR = 100;
+
+const TUTORIAL_SCRIPT: TutorialScriptStep[] = [
+  {
+    id: "intro-match",
+    message: "Tap these two matching tiles to connect them.",
+    placement: "bottom",
+    matchBoard: "intro",
+  },
+  {
+    id: "hud-level",
+    message: "Level shows your current stage and the total number of levels.",
+    placement: "top",
+    tapToContinue: true,
+    highlightHud: "level",
+  },
+  {
+    id: "hud-score",
+    message: `Score goes up by ${MATCH_SCORE_PER_PAIR} points for each successful match.`,
+    placement: "top",
+    tapToContinue: true,
+    highlightHud: "score",
+  },
+  {
+    id: "hud-time",
+    message: "Time keeps decreasing. If it runs out, you lose the level.",
+    placement: "top",
+    tapToContinue: true,
+    highlightHud: "timer",
+  },
+  {
+    id: "hud-xp",
+    message: "XP tracks your progress during the run.",
+    placement: "top",
+    tapToContinue: true,
+    highlightHud: "xp",
+  },
+  {
+    id: "hud-buttons",
+    message:
+      "Quick controls: Home returns to main menu, Hint reveals a match, Settings opens options.",
+    placement: "bottom",
+    tapToContinue: true,
+    highlightButtons: true,
+  },
+  {
+    id: "gravity-intro",
+    message: "Next: gravity. After a match, tiles slide in the gravity direction.",
+    placement: "bottom",
+    tapToContinue: true,
+  },
+  {
+    id: "gravity-match",
+    message: "Make this match and watch how the board settles.",
+    placement: "bottom",
+    matchBoard: "gravity",
+  },
+  {
+    id: "gravity-explain",
+    message: "Great. Gravity re-packs the board after each match.",
+    placement: "bottom",
+    tapToContinue: true,
+  },
+  {
+    id: "frozen-intro",
+    message: "Now frozen tiles: match next to ice to break it.",
+    placement: "bottom",
+    tapToContinue: true,
+  },
+  {
+    id: "frozen-match",
+    message: "Match this pair beside ice.",
+    placement: "bottom",
+    matchBoard: "frozen",
+  },
+  {
+    id: "frozen-explain",
+    message: "Nice. Ice unlocks when a neighboring match pops.",
+    placement: "bottom",
+    tapToContinue: true,
+  },
+  {
+    id: "jumper-intro",
+    message: "Last one: monkey blockers jump to random empty cells after each match.",
+    placement: "bottom",
+    tapToContinue: true,
+  },
+  {
+    id: "jumper-match",
+    message: "Make this match and watch the monkey move.",
+    placement: "bottom",
+    matchBoard: "jumper",
+  },
+  {
+    id: "jumper-explain",
+    message: "Perfect. Monkey blockers reposition randomly every time you match.",
+    placement: "bottom",
+    tapToContinue: true,
+  },
+  {
+    id: "done",
+    message: "Tutorial complete. Tap anywhere and start your run.",
+    placement: "bottom",
+    tapToContinue: true,
+  },
+];
 
 interface MergePullAnimation {
   from: Coord;
@@ -71,13 +185,48 @@ interface GravitySlideAnimation {
   durationMs: number;
 }
 
+type TutorialStepId =
+  | "intro-match"
+  | "hud-level"
+  | "hud-score"
+  | "hud-time"
+  | "hud-xp"
+  | "hud-buttons"
+  | "gravity-intro"
+  | "gravity-match"
+  | "gravity-explain"
+  | "frozen-intro"
+  | "frozen-match"
+  | "frozen-explain"
+  | "jumper-intro"
+  | "jumper-match"
+  | "jumper-explain"
+  | "done";
+
+type TutorialBoardKind = "intro" | "gravity" | "frozen" | "jumper";
+
+interface TutorialScriptStep {
+  id: TutorialStepId;
+  message: string;
+  placement?: "top" | "center" | "bottom";
+  tapToContinue?: boolean;
+  matchBoard?: TutorialBoardKind;
+  highlightHud?: "level" | "score" | "timer" | "xp";
+  highlightButtons?: boolean;
+}
+
+interface TutorialBoardPreset {
+  board: BoardState;
+  targetPair: [Coord, Coord];
+}
+
 export class GameScene extends Phaser.Scene {
   public static readonly SCENE_KEY = "GameScene";
   private static readonly MAX_INIT_BUILD_ATTEMPTS = 12;
   private static readonly MAX_RESHUFFLE_ATTEMPTS = 24;
   private static readonly HINT_DISPLAY_DURATION_MS = 1400;
   private static readonly HINT_FEEDBACK_DURATION_S = 1.2;
-  private static readonly PHOTO_REWARD_XP_STEP = 150;
+  private static readonly XP_PROGRESS_STEP = 150;
   private static readonly OVERLAY_INTRO_DURATION_S = 0.24;
   private static readonly MATCH_CHAIN_WINDOW_MS = 1300;
   private static readonly TIME_LOW_WARNING_SECONDS = 10;
@@ -113,13 +262,20 @@ export class GameScene extends Phaser.Scene {
   private settingsModal!: SettingsModal;
   private hintButton!: HintButton;
   private homeButton!: HomeButton;
+  private replayButton!: ReplayButton;
   private startScreen!: StartScreen;
   private hudOverlay!: HudOverlay;
   private resultOverlay!: ResultOverlay;
   private hintFeedbackOverlay!: HintFeedbackOverlay;
+  private tutorialOverlay!: TutorialOverlay;
   private audio!: AudioManager;
   private settings!: Settings;
   private settingsOpen = false;
+  private tutorialProgressStore!: TutorialProgressStore;
+  private tutorialEnabled = false;
+  private tutorialStepIndex = 0;
+  private tutorialExpectedPair: [Coord, Coord] | null = null;
+  private tutorialActiveBoard: TutorialBoardKind = "intro";
 
   // Path animation state.
   private activePath: TilePath | null = null;
@@ -132,14 +288,8 @@ export class GameScene extends Phaser.Scene {
 
   // No-move warning state.
   private noMovesWarning = false;
-
-  // Tutorial text state.
-  private tutorialText: string | null = null;
-  private tutorialTimer = 0;
   private runXp = 0;
-  private photoRewardsUnlocked = 0;
   private lastWinXpGain = 0;
-  private lastWinRewardText: string | null = null;
   private previousPhase: GameState["phase"] | null = null;
   private overlayIntroTimer = 0;
   private timeLowWarningPlayed = false;
@@ -154,11 +304,14 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.settingsStore = new SettingsStore();
+    this.tutorialProgressStore = new TutorialProgressStore();
     this.settings = this.settingsStore.get();
     this.levelProgressStore = new LevelProgressStore(
       this.progression.getTotalLevels(),
       START_LEVEL_ID
     );
+    const resumeLevel = this.getResumeLevelId();
+    this.progression.setCurrentLevelById(resumeLevel);
     this.audio = new AudioManager(this.settings.fxEnabled, this.settings.musicEnabled);
     this.settingsModal = new SettingsModal(
       this.settings,
@@ -194,15 +347,18 @@ export class GameScene extends Phaser.Scene {
       this.handleHintRequest();
     });
     this.homeButton = new HomeButton(() => this.handleHomeButtonClick());
+    this.replayButton = new ReplayButton(() => this.handleReplayButtonClick());
     this.startScreen = new StartScreen(
       () => this.handleStartScreenPlay(),
       () => this.handleStartScreenSettings(),
       (levelId) => this.handleStartScreenLevelSelect(levelId),
+      () => this.handleStartScreenTutorial(),
       () => this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY)
     );
     this.hudOverlay = new HudOverlay();
     this.resultOverlay = new ResultOverlay();
     this.hintFeedbackOverlay = new HintFeedbackOverlay();
+    this.tutorialOverlay = new TutorialOverlay();
     this.hydrateThemeTileImages();
 
     this.handleResize();
@@ -210,7 +366,7 @@ export class GameScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_DOWN, this.handlePointerDown, this);
     window.addEventListener("keydown", this.handleKeyDown);
 
-    this.initLevel(this.progression.getCurrentLevel(), false);
+    this.initLevel(this.progression.getCurrentLevel(), false, false);
     this.pauseForStartScreen();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.handleShutdown, this);
   }
@@ -226,6 +382,9 @@ export class GameScene extends Phaser.Scene {
   private handlePointerDown(pointer: Phaser.Input.Pointer): void {
     const nativeEvent = pointer.event;
     if (nativeEvent instanceof MouseEvent && nativeEvent.button !== 0) {
+      return;
+    }
+    if (this.handleTutorialPointerDown(pointer)) {
       return;
     }
     if (!this.gameState || !this.layout) {
@@ -284,10 +443,12 @@ export class GameScene extends Phaser.Scene {
     this.settingsModal?.destroy();
     this.hintButton?.destroy();
     this.homeButton?.destroy();
+    this.replayButton?.destroy();
     this.startScreen?.destroy();
     this.hudOverlay?.destroy();
     this.resultOverlay?.destroy();
     this.hintFeedbackOverlay?.destroy();
+    this.tutorialOverlay?.destroy();
     this.tileImagesByTextureKey.clear();
     this.mergePullAnimations = [];
     this.gravitySlideAnimations = [];
@@ -303,7 +464,10 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private initLevel(def: LevelDef, preserveRunScore: boolean): void {
+  private initLevel(def: LevelDef, preserveRunScore: boolean, persistLastPlayed = true): void {
+    if (persistLastPlayed && this.levelProgressStore) {
+      this.levelProgressStore.setLastPlayedLevel(def.id);
+    }
     this.activeTheme = getThemeForLevel(def.id);
     const board = this.createPlayableBoard(def);
 
@@ -311,10 +475,8 @@ export class GameScene extends Phaser.Scene {
       this.runScore = 0;
       this.runScoreSubmitted = false;
       this.runXp = 0;
-      this.photoRewardsUnlocked = 0;
     }
     this.lastWinXpGain = 0;
-    this.lastWinRewardText = null;
     this.hintPath = null;
     this.hintPathTimerMs = 0;
     this.hintFeedbackText = null;
@@ -342,14 +504,6 @@ export class GameScene extends Phaser.Scene {
     this.pendingRemoval = null;
     this.mergePullAnimations = [];
     this.gravitySlideAnimations = [];
-
-    if (def.tutorialText) {
-      this.tutorialText = def.tutorialText;
-      this.tutorialTimer = 4;
-    } else {
-      this.tutorialText = null;
-      this.tutorialTimer = 0;
-    }
 
     this.recalculateLayout();
     this.syncStartScreenLevelSelectionState();
@@ -549,6 +703,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.settingsOpen) return;
+    if (this.tutorialEnabled) return;
     if (this.gameState.phase !== "playing") return;
     if (this.noMovesWarning) return;
 
@@ -570,10 +725,6 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.tutorialTimer > 0) {
-      this.tutorialTimer -= dt;
-    }
-
   }
 
   private handleTap(coord: Coord, boardWidth: number, boardHeight: number): void {
@@ -588,6 +739,15 @@ export class GameScene extends Phaser.Scene {
     }
     this.hintPath = null;
     this.hintPathTimerMs = 0;
+
+    if (
+      this.tutorialEnabled &&
+      this.isTutorialMatchStepActive() &&
+      !this.isCoordInsideTutorialTargetPair(coord)
+    ) {
+      this.gameState.selectedTile = null;
+      return;
+    }
 
     if (this.gameState.phase === "won") {
       this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
@@ -669,6 +829,7 @@ export class GameScene extends Phaser.Scene {
 
   private handleHintRequest(): void {
     if (this.startScreen.isVisible()) return;
+    if (this.tutorialEnabled) return;
     if (this.settingsOpen) return;
     if (this.gameState.phase !== "playing") return;
     if (this.gameState.inputLocked) return;
@@ -747,6 +908,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.pendingRemoval) return;
 
     const [a, b] = this.pendingRemoval;
+    const tutorialMatchBoard = this.tutorialEnabled ? this.tutorialActiveBoard : null;
     const matchedType = this.gameState.board.cells[a.row][a.col].tileType;
     const firstCell = this.gameState.board.cells[a.row][a.col];
     const secondCell = this.gameState.board.cells[b.row][b.col];
@@ -758,7 +920,7 @@ export class GameScene extends Phaser.Scene {
       nowMs - this.lastSuccessfulMatchAtMs <= GameScene.MATCH_CHAIN_WINDOW_MS;
     this.audio.play(GAME_SOUNDS.TILE_MATCH_SUCCESS);
     this.lastSuccessfulMatchAtMs = nowMs;
-    this.runScore += 100;
+    this.runScore += MATCH_SCORE_PER_PAIR;
     this.gameState.score = this.runScore;
 
     const unfrozen = unfreezeNeighbors(this.gameState.board, [a, b]);
@@ -824,6 +986,10 @@ export class GameScene extends Phaser.Scene {
         }
       }
       this.triggerHaptic("medium");
+    }
+
+    if (this.tutorialEnabled && tutorialMatchBoard) {
+      this.handleTutorialMatchResolved(tutorialMatchBoard);
     }
 
     this.pendingRemoval = null;
@@ -944,19 +1110,11 @@ export class GameScene extends Phaser.Scene {
     const xpGain = 20 + Math.min(30, Math.floor(levelId * 1.5));
     this.runXp += xpGain;
     this.lastWinXpGain = xpGain;
-    this.lastWinRewardText = null;
     this.audio.play(GAME_SOUNDS.XP_GAIN);
-
-    const expectedUnlocked = Math.floor(this.runXp / GameScene.PHOTO_REWARD_XP_STEP);
-    if (expectedUnlocked > this.photoRewardsUnlocked) {
-      this.photoRewardsUnlocked = expectedUnlocked;
-      this.lastWinRewardText = `Photo Reward ${this.photoRewardsUnlocked} unlocked`;
-      this.audio.play(GAME_SOUNDS.REWARD_UNLOCK);
-    }
   }
 
   private getXpProgressInStep(): number {
-    return this.runXp % GameScene.PHOTO_REWARD_XP_STEP;
+    return this.runXp % GameScene.XP_PROGRESS_STEP;
   }
 
   private renderFrame(): void {
@@ -998,6 +1156,7 @@ export class GameScene extends Phaser.Scene {
     this.hintButton.setDisabled(
       this.startScreen.isVisible() ||
       this.settingsOpen ||
+      this.tutorialEnabled ||
       this.gameState.phase !== "playing" ||
       this.gameState.inputLocked ||
       this.noMovesWarning ||
@@ -1005,6 +1164,8 @@ export class GameScene extends Phaser.Scene {
     );
     this.hintButton.setVisible(!this.startScreen.isVisible());
     this.homeButton.setVisible(!this.startScreen.isVisible());
+    this.replayButton.setVisible(!this.startScreen.isVisible() && !this.tutorialEnabled);
+    this.settingsModal.setTriggerEnabled(!this.startScreen.isVisible() && !this.tutorialEnabled);
 
     this.updateHudOverlay();
     const shouldShowHintFeedback =
@@ -1014,9 +1175,7 @@ export class GameScene extends Phaser.Scene {
       this.hintFeedbackTimer > 0;
     this.hintFeedbackOverlay.setMessage(shouldShowHintFeedback ? this.hintFeedbackText : null);
 
-    if (this.tutorialText && this.tutorialTimer > 0) {
-      this.drawTutorial(ctx, w, h);
-    }
+    this.updateTutorialOverlay();
 
     if (this.noMovesWarning) {
       this.drawNoMovesWarning(ctx, w, h);
@@ -1093,8 +1252,337 @@ export class GameScene extends Phaser.Scene {
       secondsLabel: `${seconds}s`,
       timerRatio,
       timerLow: timerRatio < 0.25,
-      xpLabel: `XP ${xpInStep}/${GameScene.PHOTO_REWARD_XP_STEP} | Rewards ${this.photoRewardsUnlocked}`,
-      xpRatio: xpInStep / GameScene.PHOTO_REWARD_XP_STEP,
+      xpLabel: `XP ${xpInStep}/${GameScene.XP_PROGRESS_STEP}`,
+      xpRatio: xpInStep / GameScene.XP_PROGRESS_STEP,
+    });
+  }
+
+  private startTutorialFlow(): void {
+    this.tutorialEnabled = true;
+    this.tutorialStepIndex = 0;
+    this.tutorialExpectedPair = null;
+    this.setTutorialStep(0);
+  }
+
+  private completeTutorial(): void {
+    this.tutorialEnabled = false;
+    this.tutorialExpectedPair = null;
+    this.tutorialProgressStore.markCompleted();
+    this.tutorialOverlay.setState({
+      visible: false,
+      message: "",
+    });
+    this.audio.play(GAME_SOUNDS.LEVEL_COMPLETE);
+    this.triggerHaptic("success");
+
+    this.initLevel(this.progression.getCurrentLevel(), false);
+    this.gameState.phase = "playing";
+    this.setSceneInputEnabled(!this.settingsOpen);
+  }
+
+  private getCurrentTutorialStep(): TutorialScriptStep | null {
+    if (!this.tutorialEnabled) {
+      return null;
+    }
+    if (this.tutorialStepIndex < 0 || this.tutorialStepIndex >= TUTORIAL_SCRIPT.length) {
+      return null;
+    }
+    return TUTORIAL_SCRIPT[this.tutorialStepIndex];
+  }
+
+  private setTutorialStep(index: number): void {
+    this.tutorialStepIndex = Math.max(0, Math.min(index, TUTORIAL_SCRIPT.length - 1));
+    const step = this.getCurrentTutorialStep();
+    this.tutorialExpectedPair = null;
+    if (!step) {
+      return;
+    }
+
+    if (step.matchBoard) {
+      this.applyTutorialBoardPreset(step.matchBoard);
+    }
+  }
+
+  private advanceTutorialStep(): void {
+    if (!this.tutorialEnabled) {
+      return;
+    }
+    const next = this.tutorialStepIndex + 1;
+    if (next >= TUTORIAL_SCRIPT.length) {
+      this.completeTutorial();
+      return;
+    }
+    this.setTutorialStep(next);
+  }
+
+  private handleTutorialPointerDown(pointer: Phaser.Input.Pointer): boolean {
+    if (!this.tutorialEnabled) {
+      return false;
+    }
+    if (this.startScreen.isVisible() || this.settingsOpen) {
+      return true;
+    }
+
+    const step = this.getCurrentTutorialStep();
+    if (!step) {
+      return false;
+    }
+
+    if (step.tapToContinue) {
+      this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+      this.triggerHaptic("light");
+      this.advanceTutorialStep();
+      return true;
+    }
+
+    if (step.matchBoard) {
+      if (!this.layout) {
+        return true;
+      }
+      const boardWidth = this.gameState.board.width;
+      const boardHeight = this.gameState.board.height;
+      const col = Math.floor((pointer.x - this.layout.offsetX) / this.layout.cellSize);
+      const row = Math.floor((pointer.y - this.layout.offsetY) / this.layout.cellSize);
+      this.handleTap({ col, row }, boardWidth, boardHeight);
+      return true;
+    }
+
+    return true;
+  }
+
+  private isTutorialMatchStepActive(): boolean {
+    const step = this.getCurrentTutorialStep();
+    return !!step?.matchBoard;
+  }
+
+  private isCoordInsideTutorialTargetPair(coord: Coord): boolean {
+    if (!this.tutorialExpectedPair) {
+      return true;
+    }
+    return this.tutorialExpectedPair.some((target) => target.row === coord.row && target.col === coord.col);
+  }
+
+  private handleTutorialMatchResolved(boardKind: TutorialBoardKind): void {
+    const step = this.getCurrentTutorialStep();
+    if (!step || step.matchBoard !== boardKind) {
+      return;
+    }
+    this.advanceTutorialStep();
+  }
+
+  private applyTutorialBoardPreset(kind: TutorialBoardKind): void {
+    const preset = this.createTutorialBoardPreset(kind);
+    this.tutorialActiveBoard = kind;
+    this.gameState.board = preset.board;
+    this.gameState.selectedTile = null;
+    this.gameState.inputLocked = false;
+    this.pendingRemoval = null;
+    this.noMovesWarning = false;
+    this.activePath = null;
+    this.pathDisplayTimer = 0;
+    this.hintPath = null;
+    this.hintPathTimerMs = 0;
+    this.keyboardCursor = { ...preset.targetPair[0] };
+    this.tutorialExpectedPair = [{ ...preset.targetPair[0] }, { ...preset.targetPair[1] }];
+    this.recalculateLayout();
+  }
+
+  private createTutorialBoardPreset(kind: TutorialBoardKind): TutorialBoardPreset {
+    if (kind === "gravity") {
+      return {
+        board: this.makeTutorialBoard(
+          [
+            [1, 2, 3, 0],
+            [2, 3, 1, 2],
+            [0, 0, 2, 3],
+            [3, 1, 0, 1],
+            [2, 1, 3, 2],
+          ],
+          "down"
+        ),
+        targetPair: [
+          { col: 0, row: 2 },
+          { col: 1, row: 2 },
+        ],
+      };
+    }
+
+    if (kind === "frozen") {
+      return {
+        board: this.makeTutorialBoard(
+          [
+            [1, 2, 3, 0],
+            [2, 3, 1, 2],
+            [1, 0, -12, 3],
+            [3, 0, 2, 1],
+            [2, 1, 3, 0],
+          ],
+          "none"
+        ),
+        targetPair: [
+          { col: 1, row: 2 },
+          { col: 1, row: 3 },
+        ],
+      };
+    }
+
+    if (kind === "jumper") {
+      return {
+        board: this.makeTutorialBoard(
+          [
+            [0, 0, 2, 3],
+            [1, -2, 3, 2],
+            [2, 1, 0, 1],
+            [3, 2, 1, 0],
+            [1, 3, 2, 1],
+          ],
+          "none"
+        ),
+        targetPair: [
+          { col: 0, row: 0 },
+          { col: 1, row: 0 },
+        ],
+      };
+    }
+
+    return {
+      board: this.makeTutorialBoard(
+        [
+          [0, 1, 2, 3],
+          [1, 2, 3, 0],
+          [2, 3, 1, 2],
+          [3, 0, 2, 1],
+          [0, 0, 1, 1],
+        ],
+        "none"
+      ),
+      targetPair: [
+        { col: 0, row: 4 },
+        { col: 1, row: 4 },
+      ],
+    };
+  }
+
+  private makeTutorialBoard(
+    rows: number[][],
+    gravity: BoardState["gravity"]
+  ): BoardState {
+    const height = rows.length;
+    const width = rows[0]?.length ?? 0;
+    const cells: Cell[][] = [];
+
+    for (let row = 0; row < height; row++) {
+      const line = rows[row];
+      const rowCells: Cell[] = [];
+      for (let col = 0; col < width; col++) {
+        const value = line[col];
+        if (value >= 0) {
+          rowCells.push({ kind: CellKind.Tile, tileType: value });
+          continue;
+        }
+        if (value === -1) {
+          rowCells.push({ kind: CellKind.Empty, tileType: null });
+          continue;
+        }
+        if (value === -2) {
+          rowCells.push({ kind: CellKind.JumpingBlocker, tileType: null });
+          continue;
+        }
+
+        const frozenType = Math.max(0, Math.abs(value) - 10);
+        rowCells.push({ kind: CellKind.FrozenTile, tileType: frozenType });
+      }
+      cells.push(rowCells);
+    }
+
+    return {
+      width,
+      height,
+      cells,
+      gravity,
+    };
+  }
+
+  private rectToTutorialSpotlight(rect: DOMRect, padding = 8, radius = 12): TutorialRectSpotlight {
+    return {
+      kind: "rect",
+      x: Math.max(0, rect.left - padding),
+      y: Math.max(0, rect.top - padding),
+      width: rect.width + padding * 2,
+      height: rect.height + padding * 2,
+      radius,
+    };
+  }
+
+  private tilePairToSpotlights(pair: [Coord, Coord]): TutorialCircleSpotlight[] {
+    const radius = Math.max(20, this.layout.cellSize * 0.42);
+    return pair.map((coord) => ({
+      kind: "circle",
+      x: this.layout.offsetX + coord.col * this.layout.cellSize + this.layout.cellSize * 0.5,
+      y: this.layout.offsetY + coord.row * this.layout.cellSize + this.layout.cellSize * 0.5,
+      radius,
+    }));
+  }
+
+  private updateTutorialOverlay(): void {
+    if (!this.tutorialEnabled || this.startScreen.isVisible()) {
+      this.tutorialOverlay.setState({
+        visible: false,
+        message: "",
+      });
+      return;
+    }
+
+    const step = this.getCurrentTutorialStep();
+    if (!step) {
+      this.tutorialOverlay.setState({
+        visible: false,
+        message: "",
+      });
+      return;
+    }
+
+    const spotlights: Array<TutorialRectSpotlight | TutorialCircleSpotlight> = [];
+
+    if (step.matchBoard && this.tutorialExpectedPair) {
+      spotlights.push(...this.tilePairToSpotlights(this.tutorialExpectedPair));
+    }
+
+    if (step.highlightHud) {
+      const hudRect = this.hudOverlay.getElementBounds(step.highlightHud);
+      if (hudRect) {
+        spotlights.push(this.rectToTutorialSpotlight(hudRect, 8, 12));
+      }
+    }
+
+    if (step.highlightButtons) {
+      const homeRect = this.homeButton.getBounds();
+      const hintRect = this.hintButton.getBounds();
+      const settingsRect = this.settingsModal.getTriggerButtonBounds();
+      if (homeRect) {
+        spotlights.push(this.rectToTutorialSpotlight(homeRect, 8, 16));
+      }
+      if (hintRect) {
+        spotlights.push(this.rectToTutorialSpotlight(hintRect, 8, 16));
+      }
+      if (settingsRect) {
+        spotlights.push(this.rectToTutorialSpotlight(settingsRect, 8, 16));
+      }
+    }
+
+    const hudBounds = this.hudOverlay.getContainerBounds();
+    const boardTop = this.layout?.offsetY ?? Math.round(window.innerHeight * 0.55);
+    const isTopMenuStep = !!(step.highlightHud || step.highlightButtons);
+    const placement = isTopMenuStep ? "board-top" : "above-hud";
+    const anchorY = isTopMenuStep ? boardTop : (hudBounds?.top ?? boardTop);
+
+    this.tutorialOverlay.setState({
+      visible: true,
+      message: step.message,
+      tapHint: step.tapToContinue ? "Tap anywhere to continue" : "",
+      placement,
+      anchorY,
+      spotlights,
     });
   }
 
@@ -1150,35 +1638,6 @@ export class GameScene extends Phaser.Scene {
     ctx.closePath();
   }
 
-  private drawTutorial(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-    const alpha = Math.min(1, this.tutorialTimer);
-    const text = this.tutorialText!;
-    const paddingX = 14;
-    const boxH = 32;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.font = "700 14px \"Plus Jakarta Sans\", system-ui, sans-serif";
-    const textW = Math.ceil(ctx.measureText(text).width);
-    const boxW = textW + paddingX * 2;
-    const boxX = Math.round((w - boxW) / 2);
-    const boxY = Math.round(h - 52);
-
-    ctx.fillStyle = "rgba(253, 228, 203, 0.94)";
-    this.drawRoundBar(ctx, boxX, boxY, boxW, boxH, 11);
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(235, 134, 134, 0.36)";
-    ctx.lineWidth = 1;
-    this.drawRoundBar(ctx, boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1, 10);
-    ctx.stroke();
-
-    ctx.fillStyle = "#5a4438";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, w / 2, boxY + boxH / 2 + 0.5);
-    ctx.restore();
-  }
-
   private drawNoMovesWarning(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     ctx.fillStyle = "rgba(87, 56, 48, 0.42)";
     ctx.fillRect(0, 0, w, h);
@@ -1231,7 +1690,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.startScreen.isVisible() || this.noMovesWarning) {
+    if (this.startScreen.isVisible() || this.noMovesWarning || this.tutorialEnabled) {
       this.resultOverlay.update({
         phase: "hidden",
         campaignCompleted: false,
@@ -1240,9 +1699,7 @@ export class GameScene extends Phaser.Scene {
         score: 0,
         lastWinXpGain: 0,
         xpInStep: 0,
-        xpStep: GameScene.PHOTO_REWARD_XP_STEP,
-        rewardsUnlocked: 0,
-        rewardText: null,
+        xpStep: GameScene.XP_PROGRESS_STEP,
       });
       return;
     }
@@ -1256,9 +1713,7 @@ export class GameScene extends Phaser.Scene {
         score: 0,
         lastWinXpGain: 0,
         xpInStep: 0,
-        xpStep: GameScene.PHOTO_REWARD_XP_STEP,
-        rewardsUnlocked: 0,
-        rewardText: null,
+        xpStep: GameScene.XP_PROGRESS_STEP,
       });
       return;
     }
@@ -1271,9 +1726,7 @@ export class GameScene extends Phaser.Scene {
       score: this.gameState.score,
       lastWinXpGain: this.lastWinXpGain,
       xpInStep: this.getXpProgressInStep(),
-      xpStep: GameScene.PHOTO_REWARD_XP_STEP,
-      rewardsUnlocked: this.photoRewardsUnlocked,
-      rewardText: this.lastWinRewardText,
+      xpStep: GameScene.XP_PROGRESS_STEP,
     });
   }
 
@@ -1336,7 +1789,7 @@ export class GameScene extends Phaser.Scene {
       const progressY = cardY + 176;
       const progressW = cardW - 60;
       const progressH = 9;
-      const progressRatio = this.getXpProgressInStep() / GameScene.PHOTO_REWARD_XP_STEP;
+      const progressRatio = this.getXpProgressInStep() / GameScene.XP_PROGRESS_STEP;
 
       ctx.fillStyle = "rgba(255,255,255,0.16)";
       this.drawRoundBar(ctx, progressX, progressY, progressW, progressH, 5);
@@ -1351,23 +1804,10 @@ export class GameScene extends Phaser.Scene {
       ctx.fillStyle = "rgba(255,255,255,0.78)";
       ctx.font = "500 13px system-ui, sans-serif";
       ctx.fillText(
-        `XP ${this.getXpProgressInStep()}/${GameScene.PHOTO_REWARD_XP_STEP} | Rewards ${this.photoRewardsUnlocked}`,
+        `XP ${this.getXpProgressInStep()}/${GameScene.XP_PROGRESS_STEP}`,
         w / 2,
         progressY + 20
       );
-
-      if (this.lastWinRewardText) {
-        ctx.fillStyle = "rgba(246, 196, 69, 0.2)";
-        this.drawRoundBar(ctx, cardX + 38, cardY + 214, cardW - 76, 28, 8);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(246, 196, 69, 0.9)";
-        ctx.lineWidth = 1;
-        this.drawRoundBar(ctx, cardX + 38, cardY + 214, cardW - 76, 28, 8);
-        ctx.stroke();
-        ctx.fillStyle = "#ffd56c";
-        ctx.font = "600 13px system-ui, sans-serif";
-        ctx.fillText(`${this.lastWinRewardText} (placeholder)`, w / 2, cardY + 228);
-      }
 
       ctx.fillStyle = "rgba(255,255,255,0.12)";
       this.drawRoundBar(ctx, cardX + 54, cardY + cardH - 46, cardW - 108, 30, 10);
@@ -1412,6 +1852,10 @@ export class GameScene extends Phaser.Scene {
   private pauseForStartScreen(): void {
     this.gameState.phase = "paused";
     this.gameState.selectedTile = null;
+    this.tutorialOverlay.setState({
+      visible: false,
+      message: "",
+    });
     this.syncStartScreenLevelSelectionState();
     this.scene.launch('AmbientMenuScene', { theme: this.activeTheme });
     this.startScreen.show();
@@ -1442,6 +1886,21 @@ export class GameScene extends Phaser.Scene {
     this.triggerHaptic("light");
   }
 
+  private handleStartScreenTutorial(): void {
+    if (!this.startScreen.isVisible() || this.settingsOpen) {
+      return;
+    }
+
+    const tutorialLevel = this.progression.setCurrentLevelById(1) ?? this.progression.getCurrentLevel();
+    this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+    this.scene.stop("AmbientMenuScene");
+    this.initLevel(tutorialLevel, false, false);
+    this.startScreen.hide();
+    this.startTutorialFlow();
+    this.setSceneInputEnabled(!this.settingsOpen);
+    this.triggerHaptic("light");
+  }
+
   private handleStartScreenLevelSelect(levelId: number): void {
     if (!this.startScreen.isVisible() || this.settingsOpen) {
       return;
@@ -1468,6 +1927,9 @@ export class GameScene extends Phaser.Scene {
     if (this.startScreen.isVisible()) {
       return;
     }
+    if (this.tutorialEnabled) {
+      return;
+    }
 
     this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
     this.settingsModal.closeFromExternalTrigger();
@@ -1482,6 +1944,26 @@ export class GameScene extends Phaser.Scene {
     this.triggerHaptic("light");
   }
 
+  private handleReplayButtonClick(): void {
+    if (this.startScreen.isVisible() || this.tutorialEnabled) {
+      return;
+    }
+
+    this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+    this.settingsModal.closeFromExternalTrigger();
+    this.settingsOpen = false;
+    this.hintPath = null;
+    this.hintPathTimerMs = 0;
+    this.hintFeedbackText = null;
+    this.hintFeedbackTimer = 0;
+    this.activePath = null;
+    this.pathDisplayTimer = 0;
+    this.noMovesWarning = false;
+    this.restartLevel();
+    this.setSceneInputEnabled(!this.settingsOpen && !this.startScreen.isVisible());
+    this.triggerHaptic("medium");
+  }
+
   private getUnlockedThroughLevelId(): number {
     const totalLevels = this.progression.getTotalLevels();
     const baseline = Math.max(1, Math.min(totalLevels, START_LEVEL_ID));
@@ -1492,6 +1974,24 @@ export class GameScene extends Phaser.Scene {
       baseline,
       Math.min(totalLevels, this.levelProgressStore.getHighestUnlockedLevel())
     );
+  }
+
+  private getResumeLevelId(): number {
+    const totalLevels = this.progression.getTotalLevels();
+    const baseline = Math.max(1, Math.min(totalLevels, START_LEVEL_ID));
+    if (!this.levelProgressStore) {
+      return baseline;
+    }
+
+    const highestUnlocked = Math.max(
+      baseline,
+      Math.min(totalLevels, this.levelProgressStore.getHighestUnlockedLevel())
+    );
+    const lastPlayed = Math.max(
+      baseline,
+      Math.min(highestUnlocked, this.levelProgressStore.getLastPlayedLevel())
+    );
+    return lastPlayed;
   }
 
   private syncStartScreenLevelSelectionState(): void {
@@ -1539,6 +2039,22 @@ export class GameScene extends Phaser.Scene {
 
     if (this.settingsOpen) {
       return;
+    }
+
+    if (this.tutorialEnabled) {
+      const step = this.getCurrentTutorialStep();
+      if (step?.tapToContinue) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+          this.triggerHaptic("light");
+          this.advanceTutorialStep();
+        }
+        return;
+      }
+      if (!step?.matchBoard) {
+        return;
+      }
     }
 
     const board = this.gameState.board;

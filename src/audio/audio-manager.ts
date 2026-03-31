@@ -15,7 +15,6 @@ export const GAME_SOUNDS = {
   LEVEL_COMPLETE: "level_complete",
   CAMPAIGN_COMPLETE: "campaign_complete",
   XP_GAIN: "xp_gain",
-  REWARD_UNLOCK: "reward_unlock",
   TIME_LOW_WARNING: "time_low_warning",
   TIME_UP: "time_up",
   NO_MOVES_WARNING: "no_moves_warning",
@@ -125,12 +124,6 @@ const SOUND_CONFIG: Record<GameSoundName, SoundConfig> = {
     src: "/assets/sounds/xp_gain.wav",
     volume: 0.63,
     cooldownMs: 180,
-    restartIfPlaying: false,
-  },
-  reward_unlock: {
-    src: "/assets/sounds/reward_unlock.wav",
-    volume: 0.75,
-    cooldownMs: 250,
     restartIfPlaying: false,
   },
   time_low_warning: {

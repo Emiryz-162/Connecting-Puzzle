@@ -123,6 +123,12 @@
   box-shadow: 0 8px 0 0 #d9c5af;
 }
 
+.tutorial-menu-btn {
+  color: #ffffff;
+  background: linear-gradient(145deg, #f3a28f, #e98787);
+  box-shadow: 0 8px 0 0 #bd6c67;
+}
+
 .button-label {
   font-weight: 800;
   letter-spacing: 0.08em;

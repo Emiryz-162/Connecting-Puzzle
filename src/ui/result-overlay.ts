@@ -11,8 +11,6 @@ interface ResultSnapshot {
   lastWinXpGain: number;
   xpInStep: number;
   xpStep: number;
-  rewardsUnlocked: number;
-  rewardText: string | null;
 }
 
 function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>): void {
@@ -35,7 +33,6 @@ export class ResultOverlay {
   private readonly xpTrack: HTMLDivElement;
   private readonly xpFill: HTMLDivElement;
   private readonly xpDetail: HTMLDivElement;
-  private readonly rewardBadge: HTMLDivElement;
   private readonly actionText: HTMLDivElement;
   private visible = false;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
@@ -135,19 +132,6 @@ export class ResultOverlay {
       fontVariantNumeric: "tabular-nums",
     });
 
-    this.rewardBadge = document.createElement("div");
-    applyStyles(this.rewardBadge, {
-      display: "none",
-      borderRadius: "12px",
-      border: "1px solid rgba(235, 134, 134, 0.38)",
-      background: "rgba(255, 255, 255, 0.46)",
-      color: "#7c5d50",
-      lineHeight: "1.2",
-      fontWeight: "700",
-      padding: "8px 10px",
-      marginBottom: "12px",
-    });
-
     this.actionText = document.createElement("div");
     applyStyles(this.actionText, {
       borderRadius: "14px",
@@ -166,7 +150,6 @@ export class ResultOverlay {
       this.xpGainText,
       this.xpTrack,
       this.xpDetail,
-      this.rewardBadge,
       this.actionText
     );
 
@@ -201,15 +184,8 @@ export class ResultOverlay {
       this.xpDetail.style.display = "block";
       this.xpGainText.textContent = `+${snapshot.lastWinXpGain} XP`;
       this.xpFill.style.width = `${clamp01(snapshot.xpInStep / snapshot.xpStep) * 100}%`;
-      this.xpDetail.textContent = `XP ${snapshot.xpInStep}/${snapshot.xpStep} | Rewards ${snapshot.rewardsUnlocked}`;
+      this.xpDetail.textContent = `XP ${snapshot.xpInStep}/${snapshot.xpStep}`;
       this.actionText.textContent = action;
-
-      if (snapshot.rewardText) {
-        this.rewardBadge.style.display = "block";
-        this.rewardBadge.textContent = `${snapshot.rewardText} (placeholder)`;
-      } else {
-        this.rewardBadge.style.display = "none";
-      }
       return;
     }
 
@@ -220,7 +196,6 @@ export class ResultOverlay {
     this.xpGainText.style.display = "none";
     this.xpTrack.style.display = "none";
     this.xpDetail.style.display = "none";
-    this.rewardBadge.style.display = "none";
     this.actionText.textContent = "Tap to retry";
   }
 
@@ -243,7 +218,6 @@ export class ResultOverlay {
     this.xpGainText.style.fontSize = metrics.isMobile ? "17px" : "17px";
     this.xpTrack.style.height = metrics.isMobile ? "10px" : "10px";
     this.xpDetail.style.fontSize = metrics.isMobile ? "13px" : "13px";
-    this.rewardBadge.style.fontSize = metrics.isMobile ? "13px" : "13px";
     this.actionText.style.fontSize = metrics.isMobile ? "15px" : "14px";
   }
 
