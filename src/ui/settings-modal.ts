@@ -183,6 +183,14 @@ export class SettingsModal {
     this.backdrop.remove();
   }
 
+  openFromExternalTrigger(): void {
+    this.openPanel();
+  }
+
+  closeFromExternalTrigger(): void {
+    this.closePanel();
+  }
+
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
     applyStyles(this.button, {
@@ -313,7 +321,7 @@ export class SettingsModal {
     this.toggles.hapticsEnabled.checked = settings.hapticsEnabled;
   }
 
-  private open(): void {
+  private openPanel(): void {
     if (this.isOpen) {
       return;
     }
@@ -325,7 +333,7 @@ export class SettingsModal {
     this.onOpenChange(true);
   }
 
-  private close(): void {
+  private closePanel(): void {
     if (!this.isOpen) {
       return;
     }
@@ -339,25 +347,25 @@ export class SettingsModal {
 
   private handleOpenClick = (): void => {
     this.onPrimaryButtonClick?.();
-    this.open();
+    this.openPanel();
   };
 
   private handleCloseClick = (): void => {
     this.onPrimaryButtonClick?.();
-    this.close();
+    this.closePanel();
   };
 
   private handleBackdropClick = (event: MouseEvent): void => {
     if (event.target === this.backdrop) {
       this.onPrimaryButtonClick?.();
-      this.close();
+      this.closePanel();
     }
   };
 
   private handleEscKey = (event: KeyboardEvent): void => {
     if (event.key === "Escape") {
       this.onPrimaryButtonClick?.();
-      this.close();
+      this.closePanel();
     }
   };
 
@@ -369,4 +377,3 @@ export class SettingsModal {
     this.button.style.transform = "scale(1)";
   };
 }
-

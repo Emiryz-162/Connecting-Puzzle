@@ -10,6 +10,7 @@ import {
   GameState,
   LevelDef,
   Settings,
+  SettleMove,
   TilePath,
 } from "../types";
 import { createBoard, countRemainingTiles, removeTiles, reshuffleBoardTiles } from "../game/board";
@@ -17,7 +18,12 @@ import { findPath, hasAnyValidPair } from "../game/pathfinder";
 import { resolveGravity } from "../game/gravity";
 import { unfreezeNeighbors } from "../game/frozen";
 import { moveJumpingBlockers } from "../game/jumper";
-import { MergePullRenderItem, calculateLayout, drawBoard } from "../render/board-renderer";
+import {
+  GravitySlideRenderItem,
+  MergePullRenderItem,
+  calculateLayout,
+  drawBoard,
+} from "../render/board-renderer";
 import { LEVELS } from "../levels/level-data";
 import { LevelProgression } from "../levels/progression";
 import { SettingsStore } from "../settings/store";
@@ -43,13 +49,22 @@ import {
 } from "../constants";
 
 // Test helper: change this to start directly from a specific level id (1..30).
-const START_LEVEL_ID_FOR_TESTING = 28;
+const START_LEVEL_ID_FOR_TESTING = 1;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
 
 interface MergePullAnimation {
   from: Coord;
   to: Coord;
   tileType: number;
+  elapsedMs: number;
+  durationMs: number;
+}
+
+interface GravitySlideAnimation {
+  from: Coord;
+  to: Coord;
+  tileType: number;
+  kind: CellKind.Tile | CellKind.FrozenTile;
   elapsedMs: number;
   durationMs: number;
 }
@@ -66,6 +81,10 @@ export class GameScene extends Phaser.Scene {
   private static readonly TIME_LOW_WARNING_SECONDS = 10;
   private static readonly MERGE_PULL_DURATION_MS = 170;
   private static readonly MAX_MERGE_PULL_ANIMATIONS = 10;
+  private static readonly GRAVITY_SLIDE_BASE_DURATION_MS = 95;
+  private static readonly GRAVITY_SLIDE_PER_CELL_MS = 34;
+  private static readonly MAX_GRAVITY_SLIDE_DURATION_MS = 220;
+  private static readonly MAX_GRAVITY_SLIDE_ANIMATIONS = 64;
 
   private renderCanvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
@@ -123,6 +142,7 @@ export class GameScene extends Phaser.Scene {
   private lastSuccessfulMatchAtMs = 0;
   private keyboardCursor: Coord | null = null;
   private mergePullAnimations: MergePullAnimation[] = [];
+  private gravitySlideAnimations: GravitySlideAnimation[] = [];
 
   constructor() {
     super(GameScene.SCENE_KEY);
@@ -167,7 +187,10 @@ export class GameScene extends Phaser.Scene {
       this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
       this.handleHintRequest();
     });
-    this.startScreen = new StartScreen(() => this.handleStartScreenPlay());
+    this.startScreen = new StartScreen(
+      () => this.handleStartScreenPlay(),
+      () => this.handleStartScreenSettings()
+    );
     this.hudOverlay = new HudOverlay();
     this.resultOverlay = new ResultOverlay();
     this.hintFeedbackOverlay = new HintFeedbackOverlay();
@@ -257,6 +280,7 @@ export class GameScene extends Phaser.Scene {
     this.hintFeedbackOverlay?.destroy();
     this.tileImagesByTextureKey.clear();
     this.mergePullAnimations = [];
+    this.gravitySlideAnimations = [];
     this.monkeyImage = null;
     this.iceOverlayImage = null;
     this.foodsBackgroundImage = null;
@@ -307,6 +331,7 @@ export class GameScene extends Phaser.Scene {
     this.activePath = null;
     this.pendingRemoval = null;
     this.mergePullAnimations = [];
+    this.gravitySlideAnimations = [];
 
     if (def.tutorialText) {
       this.tutorialText = def.tutorialText;
@@ -471,6 +496,12 @@ export class GameScene extends Phaser.Scene {
     if (this.mergePullAnimations.length > 0) {
       const deltaMs = dt * 1000;
       this.mergePullAnimations = this.mergePullAnimations
+        .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
+        .filter((anim) => anim.elapsedMs < anim.durationMs);
+    }
+    if (this.gravitySlideAnimations.length > 0) {
+      const deltaMs = dt * 1000;
+      this.gravitySlideAnimations = this.gravitySlideAnimations
         .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
         .filter((anim) => anim.elapsedMs < anim.durationMs);
     }
@@ -727,6 +758,7 @@ export class GameScene extends Phaser.Scene {
 
     const gravityMoves = resolveGravity(this.gameState.board);
     if (gravityMoves.length > 0) {
+      this.startGravitySlideAnimations(gravityMoves);
       this.audio.play(GAME_SOUNDS.GRAVITY_DROP);
     }
 
@@ -768,10 +800,16 @@ export class GameScene extends Phaser.Scene {
       if (recovered && this.mergePullAnimations.length > 0) {
         this.mergePullAnimations = [];
       }
+      if (recovered && this.gravitySlideAnimations.length > 0) {
+        this.gravitySlideAnimations = [];
+      }
       this.noMovesWarning = !recovered;
       if (!recovered) {
         this.audio.play(GAME_SOUNDS.NO_MOVES_WARNING);
         this.finalizeRunScore();
+        if (this.gravitySlideAnimations.length > 0) {
+          this.gravitySlideAnimations = [];
+        }
       }
       this.triggerHaptic("medium");
     }
@@ -807,6 +845,67 @@ export class GameScene extends Phaser.Scene {
       from: anim.from,
       to: anim.to,
       tileType: anim.tileType,
+      progress: Math.max(0, Math.min(1, anim.elapsedMs / anim.durationMs)),
+    }));
+  }
+
+  private startGravitySlideAnimations(moves: SettleMove[]): void {
+    if (moves.length === 0) {
+      return;
+    }
+
+    const additions: GravitySlideAnimation[] = [];
+    for (const move of moves) {
+      const landedCell = this.gameState.board.cells[move.to.row][move.to.col];
+      if (
+        (landedCell.kind !== CellKind.Tile && landedCell.kind !== CellKind.FrozenTile) ||
+        landedCell.tileType === null
+      ) {
+        continue;
+      }
+
+      const distance =
+        Math.abs(move.from.row - move.to.row) + Math.abs(move.from.col - move.to.col);
+      const duration = Math.max(
+        GameScene.GRAVITY_SLIDE_BASE_DURATION_MS,
+        Math.min(
+          GameScene.MAX_GRAVITY_SLIDE_DURATION_MS,
+          GameScene.GRAVITY_SLIDE_BASE_DURATION_MS + distance * GameScene.GRAVITY_SLIDE_PER_CELL_MS
+        )
+      );
+      additions.push({
+        from: { ...move.from },
+        to: { ...move.to },
+        tileType: landedCell.tileType,
+        kind: landedCell.kind,
+        elapsedMs: 0,
+        durationMs: duration,
+      });
+    }
+
+    if (additions.length === 0) {
+      return;
+    }
+
+    this.gravitySlideAnimations.push(...additions);
+    if (this.gravitySlideAnimations.length > GameScene.MAX_GRAVITY_SLIDE_ANIMATIONS) {
+      this.gravitySlideAnimations.splice(
+        0,
+        this.gravitySlideAnimations.length - GameScene.MAX_GRAVITY_SLIDE_ANIMATIONS
+      );
+    }
+  }
+
+  private getGravitySlideRenderItems(): GravitySlideRenderItem[] {
+    if (this.gravitySlideAnimations.length === 0) {
+      return [];
+    }
+
+    return this.gravitySlideAnimations.map((anim) => ({
+      from: anim.from,
+      to: anim.to,
+      tileType: anim.tileType,
+      kind: anim.kind,
       progress: Math.max(0, Math.min(1, anim.elapsedMs / anim.durationMs)),
     }));
   }
@@ -874,7 +973,8 @@ export class GameScene extends Phaser.Scene {
       this.resolveTileImage,
       this.monkeyImage,
       this.iceOverlayImage,
-      this.getMergePullRenderItems()
+      this.getMergePullRenderItems(),
+      this.getGravitySlideRenderItems()
     );
     this.drawKeyboardCursor(ctx);
     this.hintButton.setDisabled(
@@ -885,6 +985,7 @@ export class GameScene extends Phaser.Scene {
       this.noMovesWarning ||
       !!this.activePath
     );
+    this.hintButton.setVisible(!this.startScreen.isVisible());
 
     this.updateHudOverlay();
     const shouldShowHintFeedback =
@@ -1271,6 +1372,9 @@ export class GameScene extends Phaser.Scene {
     if (!this.startScreen.isVisible()) {
       return;
     }
+    if (this.settingsOpen) {
+      return;
+    }
 
     this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
     this.startScreen.hide();
@@ -1278,6 +1382,12 @@ export class GameScene extends Phaser.Scene {
       this.gameState.phase = "playing";
     }
     this.setSceneInputEnabled(!this.settingsOpen);
+    this.triggerHaptic("light");
+  }
+
+  private handleStartScreenSettings(): void {
+    this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+    this.settingsModal.openFromExternalTrigger();
     this.triggerHaptic("light");
   }
 

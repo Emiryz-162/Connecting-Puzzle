@@ -9,6 +9,7 @@ function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>):
 export class HintButton {
   private readonly button: HTMLButtonElement;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
+  private visible = true;
 
   constructor(onClick: HintClickHandler) {
     this.button = document.createElement("button");
@@ -34,6 +35,15 @@ export class HintButton {
     this.button.setAttribute("aria-disabled", disabled ? "true" : "false");
     this.button.style.opacity = disabled ? "0.55" : "1";
     this.button.style.cursor = disabled ? "default" : "pointer";
+  }
+
+  setVisible(visible: boolean): void {
+    if (this.visible === visible) {
+      return;
+    }
+
+    this.visible = visible;
+    this.button.style.display = visible ? "block" : "none";
   }
 
   destroy(): void {
@@ -81,4 +91,3 @@ export class HintButton {
     this.button.style.transform = "scale(1)";
   };
 }
-

@@ -21,6 +21,14 @@ export interface MergePullRenderItem {
   progress: number; // 0..1
 }
 
+export interface GravitySlideRenderItem {
+  from: Coord;
+  to: Coord;
+  tileType: TileTypeId;
+  kind: CellKind.Tile | CellKind.FrozenTile;
+  progress: number; // 0..1
+}
+
 export function calculateLayout(
   displayW: number,
   displayH: number,
@@ -70,7 +78,8 @@ export function drawBoard(
   resolveTileImage?: TileImageResolver,
   jumpingBlockerImage?: CanvasImageSource | null,
   frozenOverlayImage?: CanvasImageSource | null,
-  mergePullItems?: MergePullRenderItem[]
+  mergePullItems?: MergePullRenderItem[],
+  gravitySlideItems?: GravitySlideRenderItem[]
 ): void {
   const { offsetX, offsetY, cellSize } = layout;
 
@@ -135,6 +144,17 @@ export function drawBoard(
 
   if (mergePullItems && mergePullItems.length > 0) {
     drawMergePullEffects(ctx, layout, cellSize, mergePullItems, resolveTileImage);
+  }
+
+  if (gravitySlideItems && gravitySlideItems.length > 0) {
+    drawGravitySlideEffects(
+      ctx,
+      layout,
+      cellSize,
+      gravitySlideItems,
+      resolveTileImage,
+      frozenOverlayImage ?? null
+    );
   }
 }
 
@@ -292,6 +312,63 @@ function drawMergePullEffects(
       ctx.arc(midX, midY, r, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+    }
+  }
+}
+
+function drawGravitySlideEffects(
+  ctx: CanvasRenderingContext2D,
+  layout: BoardLayout,
+  cellSize: number,
+  items: GravitySlideRenderItem[],
+  resolveTileImage: TileImageResolver | undefined,
+  frozenOverlayImage: CanvasImageSource | null
+): void {
+  for (const item of items) {
+    const t = clamp01(item.progress);
+    if (t <= 0 || t >= 1) {
+      continue;
+    }
+
+    const fromCenter = coordToPixel(item.from, layout);
+    const toCenter = coordToPixel(item.to, layout);
+    const eased = easeOutCubic(t);
+    const x = lerp(fromCenter.x, toCenter.x, eased);
+    const y = lerp(fromCenter.y, toCenter.y, eased);
+
+    const trailAlpha = (1 - t) * 0.34;
+    ctx.save();
+    ctx.globalAlpha = trailAlpha;
+    ctx.strokeStyle = "rgba(180, 230, 255, 0.95)";
+    ctx.lineWidth = Math.max(2, cellSize * 0.07);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(fromCenter.x, fromCenter.y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.restore();
+
+    drawTileSprite(
+      ctx,
+      item.tileType,
+      x,
+      y,
+      cellSize * 0.32,
+      cellSize,
+      resolveTileImage,
+      item.to.row,
+      item.to.col
+    );
+
+    if (item.kind === CellKind.FrozenTile) {
+      const size = Math.max(8, cellSize * 0.9);
+      drawFrozenOverlay(
+        ctx,
+        x - size / 2,
+        y - size / 2,
+        size,
+        frozenOverlayImage
+      );
     }
   }
 }
@@ -952,4 +1029,9 @@ function lerp(a: number, b: number, t: number): number {
 
 function easeInCubic(t: number): number {
   return t * t * t;
+}
+
+function easeOutCubic(t: number): number {
+  const inv = 1 - t;
+  return 1 - inv * inv * inv;
 }
