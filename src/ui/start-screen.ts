@@ -1,5 +1,4 @@
-import { getUiMetrics } from "./ui-metrics";
-import "./start-screen.css";
+import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
 
 type OnStart = () => void;
 type OnOpenSettings = () => void;
@@ -30,7 +29,6 @@ export class StartScreen {
   private readonly root: HTMLDivElement;
   private readonly content: HTMLDivElement;
   private readonly title: HTMLHeadingElement;
-  private readonly subtitle: HTMLParagraphElement;
   private readonly playButton: HTMLButtonElement;
   private readonly sectionsButton: HTMLButtonElement;
   private readonly tutorialButton: HTMLButtonElement;
@@ -89,11 +87,6 @@ export class StartScreen {
     titleBottom.textContent = "Puzzle";
     this.title.append(titleTop, titleBottom);
 
-    this.subtitle = document.createElement("p");
-    this.subtitle.className = "menu-subtitle";
-    this.subtitle.textContent =
-      "Find your flow in the golden hour. A cozy space for your mind to wander and solve.";
-
     this.playButton = document.createElement("button");
     this.playButton.className = "play-btn";
     this.playButton.type = "button";
@@ -139,7 +132,7 @@ export class StartScreen {
     noteTextWrap.append(noteLabel, noteTitle);
     this.nowPlayingCard.append(noteWrap, noteTextWrap);
 
-    this.content.append(this.title, this.subtitle, actionArea);
+    this.content.append(this.title, actionArea);
 
     this.sectionsOverlay = document.createElement("div");
     this.sectionsOverlay.className = "sections-overlay";
@@ -289,9 +282,11 @@ export class StartScreen {
 
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
+    const overlaySidePadding = 14;
+    const safeTopCss = getSafeTopOffsetCss(0);
 
     this.title.style.fontSize = metrics.isMobile ? "72px" : "86px";
-    this.subtitle.style.fontSize = metrics.isMobile ? "16px" : "20px";
+    this.title.style.marginBottom = metrics.isMobile ? "30px" : "34px";
     this.playButton.style.minHeight = metrics.isMobile ? "84px" : "96px";
     this.playButton.style.fontSize = metrics.isMobile ? "30px" : "34px";
     this.sectionsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
@@ -300,8 +295,19 @@ export class StartScreen {
     this.tutorialButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
     this.settingsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
     this.settingsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
+    this.content.style.justifyContent = metrics.isMobile ? "flex-start" : "center";
+    this.content.style.paddingTop = metrics.isMobile ? `calc(${safeTopCss} + 22px)` : "0px";
     this.content.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${metrics.isMobile ? 32 : 42}px)`;
     this.nowPlayingCard.style.display = metrics.isMobile ? "none" : "flex";
+
+    // Keep levels modal below platform overlays (safe top) on all screens.
+    this.sectionsOverlay.style.alignItems = "flex-start";
+    this.sectionsOverlay.style.paddingTop = safeTopCss;
+    this.sectionsOverlay.style.paddingRight = `${overlaySidePadding}px`;
+    this.sectionsOverlay.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px)`;
+    this.sectionsOverlay.style.paddingLeft = `${overlaySidePadding}px`;
+    this.sectionsPanel.style.maxHeight =
+      `calc(100vh - (${safeTopCss}) - (env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px))`;
   }
 
   private renderSections(): void {
