@@ -1,4 +1,4 @@
-import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
+import { getUiMetrics } from "./ui-metrics";
 import "./start-screen.css";
 
 type OnStart = () => void;
@@ -54,19 +54,19 @@ export class StartScreen {
     this.sectionsButton = document.createElement("button");
     this.sectionsButton.className = "sections-btn";
     this.sectionsButton.type = "button";
-    this.sectionsButton.setAttribute("aria-label", "Bolumler");
+    this.sectionsButton.setAttribute("aria-label", "Levels");
     this.sectionsButton.append(this.createGridIcon(), this.createButtonLabel("LEVELS"));
 
     this.settingsButton = document.createElement("button");
-    this.settingsButton.className = "settings-btn";
+    this.settingsButton.className = "sections-btn settings-menu-btn";
     this.settingsButton.type = "button";
     this.settingsButton.setAttribute("aria-label", "Open settings");
-    this.settingsButton.setAttribute("title", "Ayarlar");
-    this.settingsButton.append(this.createGearIcon());
+    this.settingsButton.setAttribute("title", "Settings");
+    this.settingsButton.append(this.createSettingsImageIcon(), this.createButtonLabel("SETTINGS"));
 
     const actionArea = document.createElement("div");
     actionArea.className = "menu-actions";
-    actionArea.append(this.playButton, this.sectionsButton);
+    actionArea.append(this.playButton, this.sectionsButton, this.settingsButton);
 
     this.nowPlayingCard = document.createElement("div");
     this.nowPlayingCard.className = "now-playing-card";
@@ -84,7 +84,7 @@ export class StartScreen {
     this.nowPlayingCard.append(noteWrap, noteTextWrap);
 
     this.content.append(this.title, this.subtitle, actionArea);
-    this.root.append(this.content, this.settingsButton, this.nowPlayingCard);
+    this.root.append(this.content, this.nowPlayingCard);
     document.body.appendChild(this.root);
 
     this.applyResponsiveStyles();
@@ -145,17 +145,14 @@ export class StartScreen {
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
 
-    this.settingsButton.style.right = `calc(env(safe-area-inset-right, 0px) + ${metrics.edgePaddingPx}px)`;
-    this.settingsButton.style.top = getSafeTopOffsetCss(12);
-    this.settingsButton.style.width = metrics.isMobile ? "52px" : "56px";
-    this.settingsButton.style.height = metrics.isMobile ? "52px" : "56px";
-
     this.title.style.fontSize = metrics.isMobile ? "72px" : "86px";
     this.subtitle.style.fontSize = metrics.isMobile ? "16px" : "20px";
     this.playButton.style.minHeight = metrics.isMobile ? "84px" : "96px";
     this.playButton.style.fontSize = metrics.isMobile ? "30px" : "34px";
     this.sectionsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
     this.sectionsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
+    this.settingsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
+    this.settingsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
     this.content.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${metrics.isMobile ? 32 : 42}px)`;
     this.nowPlayingCard.style.display = metrics.isMobile ? "none" : "flex";
   }
@@ -208,16 +205,17 @@ export class StartScreen {
     return svg;
   }
 
-  private createGearIcon(): SVGElement {
-    const svg = this.createBaseIcon(28, 28);
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute(
-      "d",
-      "M19.4 13a7.3 7.3 0 0 0 .1-1 7.3 7.3 0 0 0-.1-1l2-1.5-1.9-3.2-2.3.9a7.2 7.2 0 0 0-1.7-1l-.3-2.5h-3.8l-.3 2.5a7.2 7.2 0 0 0-1.7 1l-2.3-.9-1.9 3.2 2 1.5a7.3 7.3 0 0 0-.1 1 7.3 7.3 0 0 0 .1 1l-2 1.5 1.9 3.2 2.3-.9c.5.4 1.1.7 1.7 1l.3 2.5h3.8l.3-2.5c.6-.3 1.2-.6 1.7-1l2.3.9 1.9-3.2-2-1.5zM12 15.2A3.2 3.2 0 1 1 12 8.8a3.2 3.2 0 0 1 0 6.4z"
-    );
-    path.setAttribute("fill", "currentColor");
-    svg.appendChild(path);
-    return svg;
+  private createSettingsImageIcon(): HTMLImageElement {
+    const image = document.createElement("img");
+    image.src = "/assets/icons/settings-clean.png";
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    image.decoding = "async";
+    image.style.width = "30px";
+    image.style.height = "30px";
+    image.style.objectFit = "contain";
+    image.style.display = "block";
+    return image;
   }
 
   private createBaseIcon(width: number, height: number): SVGElement {

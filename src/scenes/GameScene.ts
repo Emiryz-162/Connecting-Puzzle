@@ -29,6 +29,7 @@ import { LevelProgression } from "../levels/progression";
 import { SettingsStore } from "../settings/store";
 import { SettingsModal } from "../ui/settings-modal";
 import { HintButton } from "../ui/hint-button";
+import { HomeButton } from "../ui/home-button";
 import { StartScreen } from "../ui/start-screen";
 import { HudOverlay } from "../ui/hud-overlay";
 import { ResultOverlay } from "../ui/result-overlay";
@@ -109,6 +110,7 @@ export class GameScene extends Phaser.Scene {
   private settingsStore!: SettingsStore;
   private settingsModal!: SettingsModal;
   private hintButton!: HintButton;
+  private homeButton!: HomeButton;
   private startScreen!: StartScreen;
   private hudOverlay!: HudOverlay;
   private resultOverlay!: ResultOverlay;
@@ -187,6 +189,7 @@ export class GameScene extends Phaser.Scene {
       this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
       this.handleHintRequest();
     });
+    this.homeButton = new HomeButton(() => this.handleHomeButtonClick());
     this.startScreen = new StartScreen(
       () => this.handleStartScreenPlay(),
       () => this.handleStartScreenSettings()
@@ -274,6 +277,7 @@ export class GameScene extends Phaser.Scene {
     this.audio?.destroy();
     this.settingsModal?.destroy();
     this.hintButton?.destroy();
+    this.homeButton?.destroy();
     this.startScreen?.destroy();
     this.hudOverlay?.destroy();
     this.resultOverlay?.destroy();
@@ -986,6 +990,7 @@ export class GameScene extends Phaser.Scene {
       !!this.activePath
     );
     this.hintButton.setVisible(!this.startScreen.isVisible());
+    this.homeButton.setVisible(!this.startScreen.isVisible());
 
     this.updateHudOverlay();
     const shouldShowHintFeedback =
@@ -1390,6 +1395,24 @@ export class GameScene extends Phaser.Scene {
   private handleStartScreenSettings(): void {
     this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
     this.settingsModal.openFromExternalTrigger();
+    this.triggerHaptic("light");
+  }
+
+  private handleHomeButtonClick(): void {
+    if (this.startScreen.isVisible()) {
+      return;
+    }
+
+    this.audio.play(GAME_SOUNDS.BUTTON_CLICK_PRIMARY);
+    this.settingsModal.closeFromExternalTrigger();
+    this.settingsOpen = false;
+    this.hintPath = null;
+    this.hintPathTimerMs = 0;
+    this.hintFeedbackText = null;
+    this.hintFeedbackTimer = 0;
+    this.activePath = null;
+    this.pathDisplayTimer = 0;
+    this.pauseForStartScreen();
     this.triggerHaptic("light");
   }
 

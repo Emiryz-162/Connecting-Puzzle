@@ -1,24 +1,25 @@
-import { getUiMetrics } from "./ui-metrics";
+import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
 
-type HintClickHandler = () => void;
+type HomeClickHandler = () => void;
 
 function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>): void {
   Object.assign(element.style, style);
 }
 
-export class HintButton {
+export class HomeButton {
   private readonly button: HTMLButtonElement;
   private readonly iconImage: HTMLImageElement;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
   private visible = true;
 
-  constructor(onClick: HintClickHandler) {
+  constructor(onClick: HomeClickHandler) {
     this.button = document.createElement("button");
     this.button.type = "button";
-    this.button.setAttribute("aria-label", "Show a valid match hint");
-    this.button.setAttribute("title", "Show hint");
+    this.button.setAttribute("aria-label", "Return to main menu");
+    this.button.setAttribute("title", "Main menu");
+
     this.iconImage = document.createElement("img");
-    this.iconImage.src = "/assets/icons/magnifying-glass-clean.png";
+    this.iconImage.src = "/assets/icons/home.png";
     this.iconImage.alt = "";
     this.iconImage.setAttribute("aria-hidden", "true");
     this.iconImage.decoding = "async";
@@ -34,13 +35,6 @@ export class HintButton {
     document.body.appendChild(this.button);
     window.addEventListener("resize", this.onWindowResize);
     window.visualViewport?.addEventListener("resize", this.onWindowResize);
-  }
-
-  setDisabled(disabled: boolean): void {
-    this.button.disabled = disabled;
-    this.button.setAttribute("aria-disabled", disabled ? "true" : "false");
-    this.button.style.opacity = disabled ? "0.55" : "1";
-    this.button.style.cursor = disabled ? "default" : "pointer";
   }
 
   setVisible(visible: boolean): void {
@@ -63,31 +57,35 @@ export class HintButton {
 
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
-    const buttonSize = metrics.isMobile ? 50 : 54;
+    const viewportWidth =
+      typeof window !== "undefined" ? window.innerWidth : document.documentElement.clientWidth;
+    const stripMargin = metrics.isMobile ? 8 : 12;
+    const stripWidth = Math.max(240, Math.round(viewportWidth - stripMargin * 2));
+    const buttonSize = metrics.isMobile ? 46 : 50;
+    const sideInset = metrics.isMobile ? 10 : 12;
+    const buttonLeft = stripMargin + sideInset;
+    const buttonTopOffset = metrics.isMobile ? 50 : 48;
 
     applyStyles(this.button, {
       position: "fixed",
-      right: `calc(env(safe-area-inset-right, 0px) + ${metrics.edgePaddingPx}px)`,
-      bottom: `calc(env(safe-area-inset-bottom, 0px) + ${metrics.isMobile ? 16 : 14}px)`,
+      top: getSafeTopOffsetCss(buttonTopOffset),
+      left: `${buttonLeft}px`,
       zIndex: "40",
       border: "none",
       background: "transparent",
-      color: "#eb8686",
       borderRadius: "999px",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       lineHeight: "1",
       padding: "0",
-      overflow: "hidden",
       cursor: "pointer",
       touchAction: "manipulation",
       width: `${buttonSize}px`,
       height: `${buttonSize}px`,
       pointerEvents: "auto",
       boxShadow: "none",
-      backdropFilter: "none",
-      transition: "transform 120ms ease, opacity 120ms ease, box-shadow 120ms ease, filter 120ms ease",
+      transition: "transform 120ms ease, opacity 120ms ease, filter 120ms ease",
     });
 
     applyStyles(this.iconImage, {
