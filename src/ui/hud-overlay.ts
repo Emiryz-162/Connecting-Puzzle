@@ -1,4 +1,5 @@
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
+import { GravityDirection } from "../types";
 
 interface HudSnapshot {
   levelLabel: string;
@@ -8,6 +9,7 @@ interface HudSnapshot {
   timerLow: boolean;
   xpLabel: string;
   xpRatio: number;
+  gravityDirection: GravityDirection;
 }
 
 function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>): void {
@@ -27,6 +29,11 @@ export class HudOverlay {
   private readonly xpRow: HTMLDivElement;
   private readonly timerFill: HTMLDivElement;
   private readonly timerText: HTMLDivElement;
+  private readonly gravityRow: HTMLDivElement;
+  private readonly gravitySvg: SVGSVGElement;
+  private readonly gravityLine: SVGLineElement;
+  private readonly gravityArrowA: SVGPolylineElement;
+  private readonly gravityArrowB: SVGPolylineElement;
   private readonly levelText: HTMLDivElement;
   private readonly scoreText: HTMLDivElement;
   private readonly xpFill: HTMLDivElement;
@@ -129,6 +136,53 @@ export class HudOverlay {
     });
     this.timerRow.append(timerTrack, this.timerText);
 
+    this.gravityRow = document.createElement("div");
+    applyStyles(this.gravityRow, {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: "8px",
+    });
+
+    this.gravitySvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.gravitySvg.setAttribute("viewBox", "0 0 96 20");
+    this.gravitySvg.setAttribute("aria-hidden", "true");
+    applyStyles(this.gravitySvg as unknown as HTMLElement, {
+      width: "74px",
+      height: "14px",
+      overflow: "visible",
+      transition: "transform 180ms ease, opacity 150ms ease",
+      transformOrigin: "center center",
+    });
+
+    this.gravityLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    this.gravityLine.setAttribute("x1", "8");
+    this.gravityLine.setAttribute("y1", "10");
+    this.gravityLine.setAttribute("x2", "88");
+    this.gravityLine.setAttribute("y2", "10");
+    this.gravityLine.setAttribute("stroke", "rgba(235, 134, 134, 0.74)");
+    this.gravityLine.setAttribute("stroke-width", "1.8");
+    this.gravityLine.setAttribute("stroke-linecap", "round");
+
+    this.gravityArrowA = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    this.gravityArrowA.setAttribute("points", "43,6.5 47,10 43,13.5");
+    this.gravityArrowA.setAttribute("fill", "none");
+    this.gravityArrowA.setAttribute("stroke", "rgba(235, 134, 134, 0.84)");
+    this.gravityArrowA.setAttribute("stroke-width", "1.8");
+    this.gravityArrowA.setAttribute("stroke-linecap", "round");
+    this.gravityArrowA.setAttribute("stroke-linejoin", "round");
+
+    this.gravityArrowB = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    this.gravityArrowB.setAttribute("points", "57,6.5 61,10 57,13.5");
+    this.gravityArrowB.setAttribute("fill", "none");
+    this.gravityArrowB.setAttribute("stroke", "rgba(235, 134, 134, 0.84)");
+    this.gravityArrowB.setAttribute("stroke-width", "1.8");
+    this.gravityArrowB.setAttribute("stroke-linecap", "round");
+    this.gravityArrowB.setAttribute("stroke-linejoin", "round");
+
+    this.gravitySvg.append(this.gravityLine, this.gravityArrowA, this.gravityArrowB);
+    this.gravityRow.appendChild(this.gravitySvg);
+
     this.xpRow = document.createElement("div");
     applyStyles(this.xpRow, {
       display: "flex",
@@ -173,7 +227,7 @@ export class HudOverlay {
     });
     this.xpRow.append(xpTrack, this.xpText);
 
-    this.root.append(this.rowTop, this.timerRow, this.xpRow);
+    this.root.append(this.rowTop, this.timerRow, this.gravityRow, this.xpRow);
     document.body.appendChild(this.root);
     this.applyResponsiveStyles();
 
@@ -204,6 +258,7 @@ export class HudOverlay {
     this.timerFill.style.width = `${timerRatio * 100}%`;
     this.timerFill.style.background = snapshot.timerLow ? "#e36f6f" : "#f59f95";
     this.xpFill.style.width = `${xpRatio * 100}%`;
+    this.applyGravityDirection(snapshot.gravityDirection);
 
     if (snapshot.timerLow) {
       this.root.style.boxShadow = "0 12px 28px rgba(210, 88, 88, 0.36)";
@@ -308,7 +363,31 @@ export class HudOverlay {
     this.xpText.style.fontSize = metrics.isMobile ? "12px" : "11px";
     this.timerFill.parentElement!.style.height = metrics.isMobile ? "11px" : "10px";
     this.xpFill.parentElement!.style.height = metrics.isMobile ? "9px" : "8px";
+    this.gravitySvg.style.width = metrics.isMobile ? "74px" : "68px";
+    this.gravitySvg.style.height = metrics.isMobile ? "14px" : "13px";
     this.updateHudBottomCssVar();
+  }
+
+  private applyGravityDirection(direction: GravityDirection): void {
+    let rotationDeg = 0;
+    if (direction === "left") rotationDeg = 180;
+    if (direction === "up") rotationDeg = -90;
+    if (direction === "down") rotationDeg = 90;
+
+    this.gravitySvg.style.transform = `rotate(${rotationDeg}deg)`;
+
+    if (direction === "none") {
+      this.gravitySvg.style.opacity = "0.46";
+      this.gravityArrowA.style.opacity = "0";
+      this.gravityArrowB.style.opacity = "0";
+      this.gravityLine.setAttribute("stroke", "rgba(235, 134, 134, 0.42)");
+      return;
+    }
+
+    this.gravitySvg.style.opacity = "1";
+    this.gravityArrowA.style.opacity = "1";
+    this.gravityArrowB.style.opacity = "1";
+    this.gravityLine.setAttribute("stroke", "rgba(235, 134, 134, 0.74)");
   }
 
   private updateHudBottomCssVar(): void {

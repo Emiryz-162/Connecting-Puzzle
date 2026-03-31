@@ -1256,6 +1256,7 @@ export class GameScene extends Phaser.Scene {
       timerLow: timerRatio < 0.25,
       xpLabel: `XP ${xpInStep}/${GameScene.XP_PROGRESS_STEP}`,
       xpRatio: xpInStep / GameScene.XP_PROGRESS_STEP,
+      gravityDirection: this.gameState.board.gravity,
     });
   }
 
