@@ -31,19 +31,19 @@ export const CELL_GAP = 3;
 export const PATH_DISPLAY_DURATION = 400;
 
 /** Arka plan rengi */
-export const BG_COLOR = "#1a1a2e";
+export const BG_COLOR = "#f8d8c2";
 
 /** Grid arka plan rengi */
-export const GRID_BG_COLOR = "#16213e";
+export const GRID_BG_COLOR = "#e9b9a0";
 
 /** Hücre arka plan rengi */
-export const CELL_BG_COLOR = "#0f3460";
+export const CELL_BG_COLOR = "#f3cfb8";
 
 /** Seçili tile kenarlık rengi */
-export const SELECTED_BORDER_COLOR = "#e94560";
+export const SELECTED_BORDER_COLOR = "#eb8686";
 
 /** Path çizgi rengi */
-export const PATH_LINE_COLOR = "#e94560";
+export const PATH_LINE_COLOR = "#eb8686";
 
 /** HUD metin rengi */
 export const HUD_TEXT_COLOR = "#eeeeee";

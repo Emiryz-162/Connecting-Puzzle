@@ -11,7 +11,7 @@ import {
 
 type TileImageResolver = (tileType: TileTypeId) => CanvasImageSource | null;
 const TILE_IMAGE_FIT_RATIO = 0.92;
-const TILE_GLITCH_IMAGE_ALPHA = 0.88;
+const TILE_IMAGE_ALPHA = 0.92;
 const TRANSPARENT_TILE_CACHE = new WeakMap<CanvasImageSource, HTMLCanvasElement>();
 
 export interface MergePullRenderItem {
@@ -132,7 +132,7 @@ export function drawBoard(
     roundRect(ctx, x, y, size, size, 6);
     ctx.stroke();
 
-    ctx.strokeStyle = "rgba(233, 69, 96, 0.3)";
+    ctx.strokeStyle = "rgba(235, 134, 134, 0.42)";
     ctx.lineWidth = 6;
     roundRect(ctx, x - 2, y - 2, size + 4, size + 4, 8);
     ctx.stroke();
@@ -167,39 +167,26 @@ function drawGridGlassBackdrop(
 ): void {
   ctx.save();
 
-  // Main board panel: transparent glass, not solid blue.
   const panelGradient = ctx.createLinearGradient(x, y, x, y + h);
-  panelGradient.addColorStop(0, "rgba(210, 238, 255, 0.10)");
-  panelGradient.addColorStop(0.5, "rgba(182, 225, 255, 0.06)");
-  panelGradient.addColorStop(1, "rgba(166, 218, 255, 0.03)");
+  panelGradient.addColorStop(0, "rgba(253, 228, 203, 0.95)");
+  panelGradient.addColorStop(0.5, "rgba(251, 203, 183, 0.93)");
+  panelGradient.addColorStop(1, "rgba(249, 183, 169, 0.90)");
+
+  ctx.shadowColor = "rgba(119, 82, 67, 0.18)";
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 8;
   ctx.fillStyle = panelGradient;
-  roundRect(ctx, x, y, w, h, 8);
+  roundRect(ctx, x, y, w, h, 14);
   ctx.fill();
 
-  // Inner haze to keep board boundaries readable while staying transparent.
-  ctx.fillStyle = "rgba(255, 255, 255, 0.035)";
-  roundRect(ctx, x + 2, y + 2, w - 4, h - 4, 7);
+  ctx.shadowColor = "transparent";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.20)";
+  roundRect(ctx, x + 3, y + 3, w - 6, h - 6, 12);
   ctx.fill();
 
-  // Glitch scan accents on board container (static, deterministic).
-  const lineCount = Math.max(5, Math.floor(h / 70));
-  for (let i = 0; i < lineCount; i++) {
-    const n = stableNoise((i + 1) * 67 + Math.floor(w) * 3 + Math.floor(h));
-    const yy = y + Math.floor(h * (0.05 + n * 0.9));
-    const pad = Math.floor(w * (0.02 + stableNoise((i + 5) * 41) * 0.04));
-    ctx.strokeStyle =
-      i % 2 === 0 ? "rgba(108, 228, 255, 0.18)" : "rgba(255, 108, 206, 0.14)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + pad, yy + 0.5);
-    ctx.lineTo(x + w - pad, yy + 0.5);
-    ctx.stroke();
-  }
-
-  // Subtle border glow.
-  ctx.strokeStyle = "rgba(208, 239, 255, 0.28)";
-  ctx.lineWidth = 1.2;
-  roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 8);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.lineWidth = 1.25;
+  roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 14);
   ctx.stroke();
 
   ctx.restore();
@@ -339,7 +326,7 @@ function drawGravitySlideEffects(
     const trailAlpha = (1 - t) * 0.34;
     ctx.save();
     ctx.globalAlpha = trailAlpha;
-    ctx.strokeStyle = "rgba(180, 230, 255, 0.95)";
+    ctx.strokeStyle = "rgba(235, 134, 134, 0.92)";
     ctx.lineWidth = Math.max(2, cellSize * 0.07);
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -397,7 +384,7 @@ function drawPullArrow(
 
   ctx.save();
   ctx.globalAlpha = alpha * 0.9;
-  ctx.strokeStyle = "rgba(255, 206, 110, 0.95)";
+  ctx.strokeStyle = "rgba(235, 134, 134, 0.98)";
   ctx.lineWidth = 2;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -410,7 +397,7 @@ function drawPullArrow(
   const leftY = tipY - uy * head + ux * head * 0.55;
   const rightX = tipX - ux * head + uy * head * 0.55;
   const rightY = tipY - uy * head - ux * head * 0.55;
-  ctx.fillStyle = "rgba(255, 206, 110, 0.98)";
+  ctx.fillStyle = "rgba(235, 134, 134, 0.98)";
   ctx.beginPath();
   ctx.moveTo(tipX, tipY);
   ctx.lineTo(leftX, leftY);
@@ -433,25 +420,32 @@ function drawTileSprite(
 ): void {
   const imageSource = resolveTileImage?.(tileType) ?? null;
   if (imageSource) {
-    drawGlitchTileImage(
+    drawStyledTileImage(
       ctx,
       imageSource,
       cx,
       cy,
       cellSize * TILE_IMAGE_FIT_RATIO,
-      cellSize * TILE_IMAGE_FIT_RATIO,
-      row,
-      col,
-      tileType
+      cellSize * TILE_IMAGE_FIT_RATIO
     );
     return;
   }
 
   const def = TILE_DEFS[tileType % TILE_DEFS.length];
-  ctx.fillStyle = def.color;
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+  const chipGradient = ctx.createLinearGradient(cx, cy - radius, cx, cy + radius);
+  chipGradient.addColorStop(0, "rgba(255, 247, 239, 0.97)");
+  chipGradient.addColorStop(1, "rgba(248, 223, 204, 0.95)");
+  ctx.fillStyle = chipGradient;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.68)";
   ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 1.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
 
+  ctx.fillStyle = def.color;
+  ctx.strokeStyle = "rgba(111, 83, 70, 0.22)";
+  ctx.lineWidth = 1.25;
   ctx.beginPath();
   switch (def.shape) {
     case "circle":
@@ -566,58 +560,47 @@ function drawCellPanel(
 ): void {
   ctx.save();
 
-  // Glass base: bright and translucent (not dark), so background remains visible.
-  const glassGradient = ctx.createLinearGradient(x, y, x, y + size);
-  glassGradient.addColorStop(0, "rgba(210, 236, 255, 0.16)");
-  glassGradient.addColorStop(0.45, "rgba(176, 224, 255, 0.10)");
-  glassGradient.addColorStop(1, "rgba(165, 214, 255, 0.06)");
-  ctx.fillStyle = glassGradient;
-  roundRect(ctx, x, y, size, size, 6);
+  const baseGradient = ctx.createLinearGradient(x, y, x, y + size);
+  baseGradient.addColorStop(0, "rgba(255, 243, 231, 0.72)");
+  baseGradient.addColorStop(1, "rgba(250, 213, 192, 0.62)");
+  ctx.fillStyle = baseGradient;
+  roundRect(ctx, x, y, size, size, 10);
   ctx.fill();
 
-  const inset = Math.max(2, size * 0.08);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
-  roundRect(ctx, x + inset, y + inset, size - inset * 2, size - inset * 2, 5);
+  const inset = Math.max(2, size * 0.09);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.24)";
+  roundRect(ctx, x + inset, y + inset, size - inset * 2, size - inset * 2, 8);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(214, 241, 255, 0.46)";
-  ctx.lineWidth = 1.1;
-  roundRect(ctx, x + 0.5, y + 0.5, size - 1, size - 1, 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.64)";
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, x + 0.5, y + 0.5, size - 1, size - 1, 10);
   ctx.stroke();
 
-  // Specular highlight strip for glass feel.
-  const shineH = Math.max(2, Math.floor(size * 0.16));
-  ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
-  roundRect(ctx, x + 2, y + 2, size - 4, shineH, 4);
+  const shineH = Math.max(2, Math.floor(size * 0.17));
+  ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+  roundRect(ctx, x + 3, y + 3, size - 6, shineH, 6);
   ctx.fill();
 
-  // Static (deterministic) glitch scan lines per-cell, no flicker.
-  const lineCount = 2;
-  for (let i = 0; i < lineCount; i++) {
-    const n = stableNoise((row + 1) * 73 + (col + 1) * 97 + i * 17);
-    const yy = y + Math.floor(size * (0.22 + n * 0.56));
-    const pad = Math.floor(size * (0.14 + n * 0.12));
-    ctx.strokeStyle = i % 2 === 0 ? "rgba(112, 232, 255, 0.24)" : "rgba(255, 104, 196, 0.20)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + pad, yy);
-    ctx.lineTo(x + size - pad, yy);
-    ctx.stroke();
-  }
+  const accentNoise = stableNoise((row + 1) * 53 + (col + 1) * 71);
+  const accentY = y + size * (0.72 + accentNoise * 0.08);
+  ctx.strokeStyle = "rgba(235, 134, 134, 0.25)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + size * 0.2, accentY);
+  ctx.lineTo(x + size * 0.8, accentY);
+  ctx.stroke();
 
   ctx.restore();
 }
 
-function drawGlitchTileImage(
+function drawStyledTileImage(
   ctx: CanvasRenderingContext2D,
   image: CanvasImageSource,
   cx: number,
   cy: number,
   maxW: number,
-  maxH: number,
-  row: number,
-  col: number,
-  tileType: number
+  maxH: number
 ): void {
   const prepared = prepareTransparentTileImage(image);
   const size = getImageSourceSize(prepared);
@@ -625,51 +608,51 @@ function drawGlitchTileImage(
     return;
   }
 
-  const scale = Math.min(maxW / size.width, maxH / size.height);
+  const frameSize = Math.max(8, Math.min(maxW, maxH));
+  const frameX = cx - frameSize / 2;
+  const frameY = cy - frameSize / 2;
+  const frameRadius = Math.max(8, frameSize * 0.22);
+  const innerPadding = Math.max(4, frameSize * 0.12);
+  const drawAreaW = frameSize - innerPadding * 2;
+  const drawAreaH = frameSize - innerPadding * 2;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(119, 82, 67, 0.2)";
+  ctx.shadowBlur = Math.max(4, frameSize * 0.1);
+  ctx.shadowOffsetY = Math.max(2, frameSize * 0.06);
+  const frameGradient = ctx.createLinearGradient(frameX, frameY, frameX, frameY + frameSize);
+  frameGradient.addColorStop(0, "rgba(255, 248, 242, 0.98)");
+  frameGradient.addColorStop(1, "rgba(248, 223, 205, 0.95)");
+  ctx.fillStyle = frameGradient;
+  roundRect(ctx, frameX, frameY, frameSize, frameSize, frameRadius);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, frameX + 0.5, frameY + 0.5, frameSize - 1, frameSize - 1, frameRadius);
+  ctx.stroke();
+  ctx.restore();
+
+  const scale = Math.min(drawAreaW / size.width, drawAreaH / size.height);
   const drawW = Math.max(1, Math.round(size.width * scale));
   const drawH = Math.max(1, Math.round(size.height * scale));
   const drawX = Math.round(cx - drawW / 2);
   const drawY = Math.round(cy - drawH / 2);
 
   ctx.save();
-  ctx.globalAlpha = TILE_GLITCH_IMAGE_ALPHA;
+  roundRect(
+    ctx,
+    frameX + innerPadding / 2,
+    frameY + innerPadding / 2,
+    frameSize - innerPadding,
+    frameSize - innerPadding,
+    Math.max(6, frameRadius - innerPadding * 0.4)
+  );
+  ctx.clip();
+  ctx.globalAlpha = TILE_IMAGE_ALPHA;
   ctx.drawImage(prepared, drawX, drawY, drawW, drawH);
-  ctx.restore();
-
-  const glitchBands = 2;
-  for (let i = 0; i < glitchBands; i++) {
-    const seed = (row + 1) * 131 + (col + 1) * 197 + (tileType + 1) * 43 + i * 13;
-    const n = stableNoise(seed);
-    const n2 = stableNoise(seed + 11);
-    const bandH = Math.max(2, Math.floor(drawH * (0.09 + n * 0.11)));
-    const bandY = drawY + Math.floor((drawH - bandH) * n2);
-    const shift = Math.floor(((stableNoise(seed + 23) - 0.5) * drawW) * 0.10);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(drawX, bandY, drawW, bandH);
-    ctx.clip();
-    ctx.globalAlpha = 0.26;
-    ctx.drawImage(prepared, drawX + shift, drawY, drawW, drawH);
-    ctx.restore();
-
-    ctx.save();
-    ctx.globalAlpha = 0.22;
-    ctx.strokeStyle = i % 2 === 0 ? "#6de7ff" : "#ff66c4";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(drawX + 2, bandY + 0.5);
-    ctx.lineTo(drawX + drawW - 2, bandY + 0.5);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Soft holographic frame so tile stays readable on busy backgrounds.
-  ctx.save();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.20)";
-  ctx.lineWidth = 1;
-  roundRect(ctx, drawX + 0.5, drawY + 0.5, drawW - 1, drawH - 1, Math.max(4, drawW * 0.11));
-  ctx.stroke();
   ctx.restore();
 }
 
@@ -878,13 +861,13 @@ function drawFrozenOverlay(
     ctx.globalAlpha = 0.5;
     drawTileImage(ctx, overlayImage, x + size / 2, y + size / 2, size * 0.94, size * 0.94);
 
-    ctx.globalAlpha = 0.24;
-    ctx.fillStyle = "#90ccff";
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = "#f5f8ff";
     roundRect(ctx, x + 1, y + 1, size - 2, size - 2, 6);
     ctx.fill();
 
-    ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = "rgba(196, 232, 255, 0.92)";
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = "rgba(238, 245, 255, 0.95)";
     ctx.lineWidth = 1.5;
     roundRect(ctx, x, y, size, size, 6);
     ctx.stroke();
@@ -892,11 +875,11 @@ function drawFrozenOverlay(
     return;
   }
 
-  ctx.fillStyle = "rgba(100, 180, 255, 0.35)";
+  ctx.fillStyle = "rgba(240, 247, 255, 0.32)";
   roundRect(ctx, x, y, size, size, 6);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(200, 230, 255, 0.5)";
+  ctx.strokeStyle = "rgba(229, 240, 255, 0.55)";
   ctx.lineWidth = 1;
   const step = size / 4;
   for (let i = 1; i < 4; i++) {
@@ -910,18 +893,18 @@ function drawFrozenOverlay(
     ctx.stroke();
   }
 
-  ctx.strokeStyle = "rgba(100, 180, 255, 0.6)";
+  ctx.strokeStyle = "rgba(214, 228, 248, 0.75)";
   ctx.lineWidth = 2;
   roundRect(ctx, x, y, size, size, 6);
   ctx.stroke();
 }
 
 function drawSolidBlocker(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-  ctx.fillStyle = "#2c3e50";
+  ctx.fillStyle = "#9a6d5d";
   roundRect(ctx, x, y, size, size, 6);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
   ctx.lineWidth = 1.5;
   const gap = size / 5;
   for (let i = 1; i < 5; i++) {
@@ -937,7 +920,7 @@ function drawSolidBlocker(ctx: CanvasRenderingContext2D, x: number, y: number, s
     ctx.stroke();
   }
 
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.3)";
+  ctx.strokeStyle = "rgba(80, 51, 41, 0.35)";
   ctx.lineWidth = 2;
   roundRect(ctx, x, y, size, size, 6);
   ctx.stroke();
@@ -954,7 +937,7 @@ function drawJumpingBlocker(
   if (monkeyImage) {
     drawTileImage(ctx, monkeyImage, cx, cy, size * 0.9, size * 0.9);
     ctx.save();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.34)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(cx, cy, Math.max(6, size * 0.43), 0, Math.PI * 2);
@@ -965,12 +948,12 @@ function drawJumpingBlocker(
 
   const r = radius * 1.1;
 
-  ctx.fillStyle = "#e67e22";
+  ctx.fillStyle = "#eb8686";
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = "#fff";
+  ctx.strokeStyle = "#fff6f0";
   ctx.lineWidth = 2.5;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -986,7 +969,7 @@ function drawJumpingBlocker(
   }
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+  ctx.strokeStyle = "rgba(93, 58, 46, 0.25)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);

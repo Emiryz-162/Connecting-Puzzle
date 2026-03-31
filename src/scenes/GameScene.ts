@@ -1011,30 +1011,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawSceneBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const image = this.resolveThemeBackgroundImage();
-    if (!image) {
-      ctx.fillStyle = BG_COLOR;
-      ctx.fillRect(0, 0, width, height);
-      return;
-    }
-
-    const imageSize = this.getCanvasImageSize(image);
-    if (!imageSize) {
-      ctx.fillStyle = BG_COLOR;
-      ctx.fillRect(0, 0, width, height);
-      return;
-    }
-
-    const scale = Math.max(width / imageSize.width, height / imageSize.height);
-    const drawWidth = imageSize.width * scale;
-    const drawHeight = imageSize.height * scale;
-    const drawX = (width - drawWidth) / 2;
-    const drawY = (height - drawHeight) / 2;
-
-    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
-
-    // Keep gameplay readability over a textured background.
-    ctx.fillStyle = "rgba(5, 12, 30, 0.42)";
+    ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
   }
 
