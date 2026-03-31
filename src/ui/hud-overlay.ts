@@ -185,6 +185,9 @@ export class HudOverlay {
 
     this.visible = visible;
     this.root.style.display = visible ? "block" : "none";
+    if (visible) {
+      window.requestAnimationFrame(() => this.updateHudBottomCssVar());
+    }
   }
 
   update(snapshot: HudSnapshot): void {
@@ -227,6 +230,9 @@ export class HudOverlay {
       window.clearTimeout(this.scorePulseTimeout);
       this.scorePulseTimeout = null;
     }
+    if (typeof document !== "undefined") {
+      document.documentElement.style.removeProperty("--cp-hud-bottom");
+    }
     this.root.remove();
   }
 
@@ -267,5 +273,20 @@ export class HudOverlay {
     this.xpText.style.fontSize = metrics.isMobile ? "12px" : "11px";
     this.timerFill.parentElement!.style.height = metrics.isMobile ? "11px" : "10px";
     this.xpFill.parentElement!.style.height = metrics.isMobile ? "9px" : "8px";
+    this.updateHudBottomCssVar();
+  }
+
+  private updateHudBottomCssVar(): void {
+    if (typeof document === "undefined") {
+      return;
+    }
+    if (!this.visible || this.root.style.display === "none") {
+      return;
+    }
+    const rect = this.root.getBoundingClientRect();
+    if (rect.height <= 0 || rect.bottom <= 0) {
+      return;
+    }
+    document.documentElement.style.setProperty("--cp-hud-bottom", `${Math.round(rect.bottom)}px`);
   }
 }

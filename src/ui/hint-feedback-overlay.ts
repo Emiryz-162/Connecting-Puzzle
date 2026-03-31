@@ -26,16 +26,15 @@ export class HintFeedbackOverlay {
 
     this.textNode = document.createElement("div");
     applyStyles(this.textNode, {
-      borderRadius: "10px",
-      border: "1px solid rgba(246, 196, 69, 0.85)",
-      background: "rgba(10, 18, 36, 0.94)",
-      color: "#f8f8f8",
-      fontFamily: "system-ui, sans-serif",
+      borderRadius: "12px",
+      border: "1px solid rgba(235, 134, 134, 0.34)",
+      background: "linear-gradient(150deg, rgba(253, 228, 203, 0.96), rgba(251, 203, 183, 0.94))",
+      color: "#5a4438",
+      fontFamily: "\"Plus Jakarta Sans\", system-ui, sans-serif",
       fontWeight: "700",
       lineHeight: "1.2",
       textAlign: "center",
-      boxShadow: "0 10px 20px rgba(0,0,0,0.32)",
-      textShadow: "0 1px 0 rgba(0,0,0,0.35)",
+      boxShadow: "0 10px 18px rgba(107, 79, 69, 0.22)",
       whiteSpace: "nowrap",
     });
 
@@ -109,4 +108,3 @@ export class HintFeedbackOverlay {
     });
   }
 }
-

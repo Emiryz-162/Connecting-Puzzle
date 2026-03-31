@@ -50,7 +50,8 @@ export class ResultOverlay {
       display: "none",
       alignItems: "center",
       justifyContent: "center",
-      background: "rgba(0, 0, 0, 0.72)",
+      background:
+        "radial-gradient(circle at 24% 12%, rgba(245, 159, 149, 0.22), transparent 42%), rgba(84, 52, 45, 0.54)",
       paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)",
       paddingRight: "calc(env(safe-area-inset-right, 0px) + 16px)",
       paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
@@ -60,12 +61,12 @@ export class ResultOverlay {
 
     this.card = document.createElement("div");
     applyStyles(this.card, {
-      borderRadius: "16px",
-      background: "rgba(18, 27, 51, 0.98)",
-      border: "1px solid rgba(255,255,255,0.16)",
-      boxShadow: "0 18px 36px rgba(0,0,0,0.35)",
-      color: "#ffffff",
-      fontFamily: "system-ui, sans-serif",
+      borderRadius: "22px",
+      background: "linear-gradient(165deg, rgba(253, 228, 203, 0.98), rgba(251, 203, 183, 0.96))",
+      border: "1px solid rgba(255,255,255,0.45)",
+      boxShadow: "0 18px 34px rgba(107, 79, 69, 0.28)",
+      color: "#4a3c31",
+      fontFamily: "\"Plus Jakarta Sans\", system-ui, sans-serif",
       textAlign: "center",
       transform: "scale(0.96)",
       opacity: "0",
@@ -85,7 +86,7 @@ export class ResultOverlay {
     applyStyles(this.subtitle, {
       lineHeight: "1.2",
       fontWeight: "500",
-      color: "rgba(255,255,255,0.86)",
+      color: "#6b5a4d",
       marginBottom: "14px",
       textRendering: "optimizeLegibility",
     });
@@ -102,7 +103,7 @@ export class ResultOverlay {
     applyStyles(this.xpGainText, {
       lineHeight: "1.1",
       fontWeight: "700",
-      color: "#f6c445",
+      color: "#d97d77",
       marginBottom: "12px",
       fontVariantNumeric: "tabular-nums",
     });
@@ -111,8 +112,8 @@ export class ResultOverlay {
     applyStyles(this.xpTrack, {
       borderRadius: "999px",
       overflow: "hidden",
-      background: "rgba(255,255,255,0.16)",
-      border: "1px solid rgba(255,255,255,0.1)",
+      background: "rgba(255,255,255,0.54)",
+      border: "1px solid rgba(235, 134, 134, 0.25)",
       marginBottom: "8px",
     });
 
@@ -120,7 +121,7 @@ export class ResultOverlay {
     applyStyles(this.xpFill, {
       width: "0%",
       height: "100%",
-      background: "#f6c445",
+      background: "#eb8686",
       transition: "width 180ms ease-out",
     });
     this.xpTrack.appendChild(this.xpFill);
@@ -129,7 +130,7 @@ export class ResultOverlay {
     applyStyles(this.xpDetail, {
       lineHeight: "1.2",
       fontWeight: "600",
-      color: "rgba(255,255,255,0.8)",
+      color: "#6b5a4d",
       marginBottom: "12px",
       fontVariantNumeric: "tabular-nums",
     });
@@ -137,10 +138,10 @@ export class ResultOverlay {
     this.rewardBadge = document.createElement("div");
     applyStyles(this.rewardBadge, {
       display: "none",
-      borderRadius: "8px",
-      border: "1px solid rgba(246, 196, 69, 0.9)",
-      background: "rgba(246, 196, 69, 0.2)",
-      color: "#ffd56c",
+      borderRadius: "12px",
+      border: "1px solid rgba(235, 134, 134, 0.38)",
+      background: "rgba(255, 255, 255, 0.46)",
+      color: "#7c5d50",
       lineHeight: "1.2",
       fontWeight: "700",
       padding: "8px 10px",
@@ -149,14 +150,13 @@ export class ResultOverlay {
 
     this.actionText = document.createElement("div");
     applyStyles(this.actionText, {
-      borderRadius: "12px",
-      border: "1px solid rgba(255,255,255,0.28)",
-      background: "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.1))",
+      borderRadius: "14px",
+      border: "1px solid rgba(235, 134, 134, 0.34)",
+      background: "linear-gradient(180deg, rgba(255,255,255,0.68), rgba(255,255,255,0.42))",
       lineHeight: "1.2",
       fontWeight: "700",
       padding: "10px 12px",
-      color: "#ffffff",
-      textShadow: "0 1px 0 rgba(0,0,0,0.3)",
+      color: "#5a4036",
     });
 
     this.card.append(
@@ -193,7 +193,7 @@ export class ResultOverlay {
       const action = snapshot.campaignCompleted ? "Tap to restart campaign" : "Tap for next level";
 
       this.title.textContent = title;
-      this.title.style.color = snapshot.campaignCompleted ? "#5ce1a0" : "#57d37c";
+      this.title.style.color = snapshot.campaignCompleted ? "#d97272" : "#eb8686";
       this.subtitle.textContent = subtitle;
       this.scoreText.textContent = `Score ${snapshot.score}`;
       this.xpGainText.style.display = "block";
@@ -214,7 +214,7 @@ export class ResultOverlay {
     }
 
     this.title.textContent = "Time's Up!";
-    this.title.style.color = "#ff6a6a";
+    this.title.style.color = "#cf7670";
     this.subtitle.textContent = "You can retry this level instantly.";
     this.scoreText.textContent = `Score ${snapshot.score}`;
     this.xpGainText.style.display = "none";
@@ -265,4 +265,3 @@ export class ResultOverlay {
     }
   }
 }
-

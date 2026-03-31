@@ -38,31 +38,64 @@ export function calculateLayout(
   const isMobile =
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
   const layoutPadding = isMobile ? Math.max(8, BOARD_PADDING - 6) : BOARD_PADDING;
-  const topReserved = isMobile ? Math.max(58, HUD_HEIGHT + 2) : Math.max(50, HUD_HEIGHT - 2);
-  const bottomReserved = isMobile ? 10 : 6;
-  const availW = displayW - layoutPadding * 2;
-  const availH = displayH - topReserved - bottomReserved - layoutPadding * 2;
-  const boardArea = boardW * boardH;
-  const baseCell = Math.min(availW / boardW, availH / boardH);
 
-  // Mobile: shrink cells progressively as tile count grows.
-  // 6x4 (24 cells) keeps original size; larger boards are scaled down smoothly.
-  let densityScale = 1;
-  if (isMobile) {
-    const overflowCells = Math.max(0, boardArea - 24);
-    densityScale = Math.max(0.82, 1 - overflowCells * 0.0065);
-  }
+  // Use percentage-based safe area margins for fully responsive board framing.
+  const hudBottomCss = resolveHudBottomFromCss();
+  const hudGap = isMobile ? 12 : 10;
+  const hudReserved = Math.max(
+    isMobile ? 214 : 136,
+    Math.round(displayH * (isMobile ? 0.285 : 0.215)),
+    hudBottomCss > 0 ? Math.round(hudBottomCss + hudGap) : 0
+  );
+  const innerMarginX = Math.max(
+    isMobile ? 8 : 10,
+    Math.round(displayW * (isMobile ? 0.034 : 0.028))
+  );
+  const innerMarginTop = Math.max(
+    isMobile ? 6 : 8,
+    Math.round(displayH * (isMobile ? 0.012 : 0.014))
+  );
+  const innerMarginBottom = Math.max(
+    isMobile ? 18 : 14,
+    Math.round(displayH * (isMobile ? 0.085 : 0.065))
+  );
 
-  const rawCellSize = baseCell * densityScale;
-  const cellSize = Math.max(1, Math.floor(rawCellSize));
+  const playLeft = layoutPadding + innerMarginX;
+  const playTop = hudReserved + innerMarginTop;
+  const playRight = displayW - layoutPadding - innerMarginX;
+  const playBottom = displayH - layoutPadding - innerMarginBottom;
+  const playW = Math.max(1, playRight - playLeft);
+  const playH = Math.max(1, playBottom - playTop);
+
+  // Fit board into safe play area; larger grids naturally yield smaller cells.
+  const fitCell = Math.min(playW / boardW, playH / boardH);
+  const maxCell = isMobile ? 78 : 92;
+  const cellSize = Math.max(1, Math.floor(Math.min(fitCell, maxCell)));
   const totalW = cellSize * boardW;
   const totalH = cellSize * boardH;
-  const offsetX = Math.round((displayW - totalW) / 2);
-  const baseOffsetY = Math.round(topReserved + layoutPadding + (availH - totalH) / 2);
-  const downwardShift = isMobile ? 60 : 36;
-  const maxOffsetY = Math.round(displayH - bottomReserved - layoutPadding - totalH);
-  const offsetY = Math.min(maxOffsetY, baseOffsetY + downwardShift);
+  const offsetX = Math.round(playLeft + (playW - totalW) / 2);
+  const offsetY = Math.round(playTop + (playH - totalH) / 2);
   return { offsetX, offsetY, cellSize };
+}
+
+function resolveHudBottomFromCss(): number {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return 0;
+  }
+
+  const raw = window
+    .getComputedStyle(document.documentElement)
+    .getPropertyValue("--cp-hud-bottom")
+    .trim();
+  if (!raw) {
+    return 0;
+  }
+
+  const parsed = Number.parseFloat(raw.replace("px", ""));
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return parsed;
 }
 
 export function coordToPixel(coord: Coord, layout: BoardLayout): { x: number; y: number } {

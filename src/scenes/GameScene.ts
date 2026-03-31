@@ -50,7 +50,7 @@ import {
 } from "../constants";
 
 // Test helper: change this to start directly from a specific level id (1..30).
-const START_LEVEL_ID_FOR_TESTING = 1;
+const START_LEVEL_ID_FOR_TESTING = 30;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
 
 interface MergePullAnimation {
@@ -955,6 +955,12 @@ export class GameScene extends Phaser.Scene {
     const ctx = this.ctx;
     const w = this.displayWidth;
     const h = this.displayHeight;
+    this.layout = calculateLayout(
+      this.displayWidth,
+      this.displayHeight,
+      this.gameState.board.width,
+      this.gameState.board.height
+    );
     let pathToDraw: TilePath | null = null;
     let pathAlpha = 1;
     if (this.activePath && this.pathDisplayTimer > 0) {
@@ -1138,26 +1144,78 @@ export class GameScene extends Phaser.Scene {
 
   private drawTutorial(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const alpha = Math.min(1, this.tutorialTimer);
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.8 * alpha})`;
-    ctx.font = "bold 14px system-ui, sans-serif";
+    const text = this.tutorialText!;
+    const paddingX = 14;
+    const boxH = 32;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = "700 14px \"Plus Jakarta Sans\", system-ui, sans-serif";
+    const textW = Math.ceil(ctx.measureText(text).width);
+    const boxW = textW + paddingX * 2;
+    const boxX = Math.round((w - boxW) / 2);
+    const boxY = Math.round(h - 52);
+
+    ctx.fillStyle = "rgba(253, 228, 203, 0.94)";
+    this.drawRoundBar(ctx, boxX, boxY, boxW, boxH, 11);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(235, 134, 134, 0.36)";
+    ctx.lineWidth = 1;
+    this.drawRoundBar(ctx, boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1, 10);
+    ctx.stroke();
+
+    ctx.fillStyle = "#5a4438";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(this.tutorialText!, w / 2, h - 30);
+    ctx.fillText(text, w / 2, boxY + boxH / 2 + 0.5);
+    ctx.restore();
   }
 
   private drawNoMovesWarning(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillStyle = "rgba(87, 56, 48, 0.42)";
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "#e74c3c";
-    ctx.font = "bold 24px system-ui, sans-serif";
+    const cardW = Math.min(360, w - 30);
+    const cardH = 176;
+    const cardX = (w - cardW) / 2;
+    const cardY = (h - cardH) / 2;
+
+    const panelGradient = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH);
+    panelGradient.addColorStop(0, "rgba(253, 228, 203, 0.98)");
+    panelGradient.addColorStop(1, "rgba(251, 203, 183, 0.97)");
+    ctx.fillStyle = panelGradient;
+    this.drawRoundBar(ctx, cardX, cardY, cardW, cardH, 18);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.46)";
+    ctx.lineWidth = 1.2;
+    this.drawRoundBar(ctx, cardX + 0.5, cardY + 0.5, cardW - 1, cardH - 1, 18);
+    ctx.stroke();
+
+    ctx.fillStyle = "#d87979";
+    ctx.font = "800 30px \"Plus Jakarta Sans\", system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("No Moves Left!", w / 2, h / 2 - 20);
+    ctx.fillText("No Moves Left!", w / 2, cardY + 56);
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-    ctx.font = "16px system-ui, sans-serif";
-    ctx.fillText("Tap to restart", w / 2, h / 2 + 20);
+    ctx.fillStyle = "#6b5a4d";
+    ctx.font = "600 16px \"Plus Jakarta Sans\", system-ui, sans-serif";
+    ctx.fillText("Tap to restart", w / 2, cardY + 90);
+
+    const ctaW = cardW - 72;
+    const ctaH = 36;
+    const ctaX = (w - ctaW) / 2;
+    const ctaY = cardY + cardH - 52;
+    ctx.fillStyle = "rgba(255,255,255,0.56)";
+    this.drawRoundBar(ctx, ctaX, ctaY, ctaW, ctaH, 12);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(235, 134, 134, 0.34)";
+    ctx.lineWidth = 1;
+    this.drawRoundBar(ctx, ctaX + 0.5, ctaY + 0.5, ctaW - 1, ctaH - 1, 12);
+    ctx.stroke();
+    ctx.fillStyle = "#5a4036";
+    ctx.font = "700 14px \"Plus Jakarta Sans\", system-ui, sans-serif";
+    ctx.fillText("Tap anywhere", w / 2, ctaY + ctaH / 2 + 0.5);
   }
 
   private updateResultOverlay(): void {
