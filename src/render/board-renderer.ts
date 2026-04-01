@@ -138,6 +138,11 @@ export function drawBoard(
       const cy = offsetY + (row + 0.5) * cellSize;
       const radius = size * 0.32;
 
+      if (cell.kind === CellKind.Empty) {
+        drawEmptyCellPortal(ctx, x, y, size, row, col);
+        continue;
+      }
+
       drawCellPanel(ctx, x, y, size, row, col);
 
       if (cell.kind === CellKind.Tile && cell.tileType !== null) {
@@ -205,9 +210,9 @@ function drawGridGlassBackdrop(
   ctx.save();
 
   const panelGradient = ctx.createLinearGradient(x, y, x, y + h);
-  panelGradient.addColorStop(0, "rgba(253, 228, 203, 0.95)");
-  panelGradient.addColorStop(0.5, "rgba(251, 203, 183, 0.93)");
-  panelGradient.addColorStop(1, "rgba(249, 183, 169, 0.90)");
+  panelGradient.addColorStop(0, "rgba(253, 228, 203, 0.42)");
+  panelGradient.addColorStop(0.5, "rgba(251, 203, 183, 0.34)");
+  panelGradient.addColorStop(1, "rgba(249, 183, 169, 0.28)");
 
   ctx.shadowColor = "rgba(119, 82, 67, 0.18)";
   ctx.shadowBlur = 18;
@@ -217,11 +222,11 @@ function drawGridGlassBackdrop(
   ctx.fill();
 
   ctx.shadowColor = "transparent";
-  ctx.fillStyle = "rgba(255, 255, 255, 0.20)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
   roundRect(ctx, x + 3, y + 3, w - 6, h - 6, 12);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
   ctx.lineWidth = 1.25;
   roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 14);
   ctx.stroke();
@@ -626,6 +631,54 @@ function drawCellPanel(
   ctx.beginPath();
   ctx.moveTo(x + size * 0.2, accentY);
   ctx.lineTo(x + size * 0.8, accentY);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawEmptyCellPortal(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  row: number,
+  col: number
+): void {
+  ctx.save();
+
+  const depthGradient = ctx.createLinearGradient(x, y, x, y + size);
+  depthGradient.addColorStop(0, "rgba(33, 28, 37, 0.34)");
+  depthGradient.addColorStop(1, "rgba(10, 16, 30, 0.48)");
+  ctx.fillStyle = depthGradient;
+  roundRect(ctx, x, y, size, size, 10);
+  ctx.fill();
+
+  const innerInset = Math.max(2, size * 0.1);
+  const innerGlow = ctx.createRadialGradient(
+    x + size * 0.5,
+    y + size * 0.45,
+    size * 0.06,
+    x + size * 0.5,
+    y + size * 0.5,
+    size * 0.56
+  );
+  innerGlow.addColorStop(0, "rgba(255, 255, 255, 0.16)");
+  innerGlow.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = innerGlow;
+  roundRect(
+    ctx,
+    x + innerInset,
+    y + innerInset,
+    size - innerInset * 2,
+    size - innerInset * 2,
+    8
+  );
+  ctx.fill();
+
+  const rimAlpha = 0.26 + stableNoise((row + 1) * 97 + (col + 1) * 31) * 0.08;
+  ctx.strokeStyle = `rgba(255, 255, 255, ${rimAlpha})`;
+  ctx.lineWidth = 1.1;
+  roundRect(ctx, x + 0.5, y + 0.5, size - 1, size - 1, 10);
   ctx.stroke();
 
   ctx.restore();

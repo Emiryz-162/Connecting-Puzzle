@@ -1188,6 +1188,62 @@ export class GameScene extends Phaser.Scene {
   private drawSceneBackground(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
+
+    const themeBackground = this.resolveThemeBackgroundImage();
+    if (themeBackground) {
+      const imageSize = this.getCanvasImageSize(themeBackground);
+      if (imageSize) {
+        const coverScale = Math.max(width / imageSize.width, height / imageSize.height);
+        const drawWidth = imageSize.width * coverScale;
+        const drawHeight = imageSize.height * coverScale;
+        const drawX = (width - drawWidth) * 0.5;
+        const drawY = (height - drawHeight) * 0.5;
+
+        ctx.save();
+        ctx.globalAlpha = 0.58;
+        ctx.drawImage(themeBackground, drawX, drawY, drawWidth, drawHeight);
+        ctx.restore();
+      }
+    }
+
+    const overlay = this.getThemeBackgroundOverlay();
+    const overlayGradient = ctx.createLinearGradient(0, 0, 0, height);
+    overlayGradient.addColorStop(0, overlay.top);
+    overlayGradient.addColorStop(1, overlay.bottom);
+    ctx.fillStyle = overlayGradient;
+    ctx.fillRect(0, 0, width, height);
+
+    const vignette = ctx.createRadialGradient(
+      width * 0.5,
+      height * 0.42,
+      Math.min(width, height) * 0.14,
+      width * 0.5,
+      height * 0.5,
+      Math.max(width, height) * 0.86
+    );
+    vignette.addColorStop(0, "rgba(255, 255, 255, 0.04)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.18)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  private getThemeBackgroundOverlay(): { top: string; bottom: string } {
+    if (this.activeTheme === "foods") {
+      return {
+        top: "rgba(92, 48, 34, 0.18)",
+        bottom: "rgba(63, 31, 38, 0.34)",
+      };
+    }
+    if (this.activeTheme === "landmarks") {
+      return {
+        top: "rgba(29, 56, 82, 0.20)",
+        bottom: "rgba(13, 36, 66, 0.36)",
+      };
+    }
+    return {
+      top: "rgba(10, 18, 48, 0.24)",
+      bottom: "rgba(5, 10, 29, 0.42)",
+    };
   }
 
   private resolveThemeBackgroundImage(): CanvasImageSource | null {
