@@ -20,10 +20,12 @@ import { resolveGravity } from "../game/gravity";
 import { unfreezeNeighbors } from "../game/frozen";
 import { moveJumpingBlockers } from "../game/jumper";
 import {
+  FallingTileRenderItem,
   GravitySlideRenderItem,
   MergePullRenderItem,
   calculateLayout,
   drawBoard,
+  drawFallingTiles,
 } from "../render/board-renderer";
 import { LEVELS } from "../levels/level-data";
 import { LevelProgression } from "../levels/progression";
@@ -185,6 +187,32 @@ interface GravitySlideAnimation {
   durationMs: number;
 }
 
+interface MatchClearTileAnimation {
+  coord: Coord;
+  tileType: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotationRad: number;
+  rotationSpeedRad: number;
+  alpha: number;
+  scale: number;
+}
+
+interface MatchClearAnimation {
+  phase: "approach" | "scatter";
+  pathPoints: Array<{ x: number; y: number }>;
+  segmentLengths: number[];
+  totalPathLength: number;
+  meetDistance: number;
+  approachElapsedMs: number;
+  approachDurationMs: number;
+  scatterElapsedMs: number;
+  scatterDurationMs: number;
+  tiles: [MatchClearTileAnimation, MatchClearTileAnimation];
+}
+
 type TutorialStepId =
   | "intro-match"
   | "hud-level"
@@ -236,6 +264,11 @@ export class GameScene extends Phaser.Scene {
   private static readonly GRAVITY_SLIDE_PER_CELL_MS = 34;
   private static readonly MAX_GRAVITY_SLIDE_DURATION_MS = 220;
   private static readonly MAX_GRAVITY_SLIDE_ANIMATIONS = 64;
+  private static readonly MATCH_CLEAR_APPROACH_DURATION_MS = 220;
+  private static readonly MATCH_CLEAR_SCATTER_DURATION_MS = 430;
+  private static readonly MATCH_CLEAR_SCATTER_GRAVITY_PX_S2 = 2750;
+  private static readonly MATCH_CLEAR_SCATTER_SPEED_PX_S = 300;
+  private static readonly MATCH_CLEAR_SCATTER_LIFT_PX_S = 245;
 
   private renderCanvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
@@ -281,6 +314,7 @@ export class GameScene extends Phaser.Scene {
   private activePath: TilePath | null = null;
   private pathDisplayTimer = 0;
   private pendingRemoval: [Coord, Coord] | null = null;
+  private pendingRemovalUsedClearFall = false;
   private hintPath: TilePath | null = null;
   private hintPathTimerMs = 0;
   private hintFeedbackText: string | null = null;
@@ -297,6 +331,7 @@ export class GameScene extends Phaser.Scene {
   private keyboardCursor: Coord | null = null;
   private mergePullAnimations: MergePullAnimation[] = [];
   private gravitySlideAnimations: GravitySlideAnimation[] = [];
+  private matchClearAnimation: MatchClearAnimation | null = null;
 
   constructor() {
     super(GameScene.SCENE_KEY);
@@ -452,6 +487,7 @@ export class GameScene extends Phaser.Scene {
     this.tileImagesByTextureKey.clear();
     this.mergePullAnimations = [];
     this.gravitySlideAnimations = [];
+    this.matchClearAnimation = null;
     this.monkeyImage = null;
     this.iceOverlayImage = null;
     this.foodsBackgroundImage = null;
@@ -502,8 +538,10 @@ export class GameScene extends Phaser.Scene {
     this.noMovesWarning = false;
     this.activePath = null;
     this.pendingRemoval = null;
+    this.pendingRemovalUsedClearFall = false;
     this.mergePullAnimations = [];
     this.gravitySlideAnimations = [];
+    this.matchClearAnimation = null;
 
     this.recalculateLayout();
     this.syncStartScreenLevelSelectionState();
@@ -658,14 +696,20 @@ export class GameScene extends Phaser.Scene {
   };
 
   private updateState(dt: number): void {
+    const deltaMs = dt * 1000;
+
+    this.updateMatchClearAnimation(dt, deltaMs);
+
+    if (this.pendingRemoval && !this.matchClearAnimation && this.gameState.inputLocked) {
+      this.executeRemoval();
+    }
+
     if (this.mergePullAnimations.length > 0) {
-      const deltaMs = dt * 1000;
       this.mergePullAnimations = this.mergePullAnimations
         .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
         .filter((anim) => anim.elapsedMs < anim.durationMs);
     }
     if (this.gravitySlideAnimations.length > 0) {
-      const deltaMs = dt * 1000;
       this.gravitySlideAnimations = this.gravitySlideAnimations
         .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
         .filter((anim) => anim.elapsedMs < anim.durationMs);
@@ -696,7 +740,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.activePath && this.pathDisplayTimer > 0) {
-      this.pathDisplayTimer = Math.max(0, this.pathDisplayTimer - dt * 1000);
+      this.pathDisplayTimer = Math.max(0, this.pathDisplayTimer - deltaMs);
       if (this.pathDisplayTimer <= 0) {
         this.activePath = null;
       }
@@ -819,12 +863,13 @@ export class GameScene extends Phaser.Scene {
     this.activePath = path;
     this.pathDisplayTimer = PATH_DISPLAY_DURATION;
     this.pendingRemoval = [selected, coord];
+    this.pendingRemovalUsedClearFall = false;
     this.noMovesWarning = false;
     this.hintFeedbackText = null;
     this.hintFeedbackTimer = 0;
 
     this.triggerHaptic("light");
-    this.executeRemoval();
+    this.startMatchClearAnimationForPendingRemoval(path);
   }
 
   private handleHintRequest(): void {
@@ -895,6 +940,274 @@ export class GameScene extends Phaser.Scene {
     this.hintFeedbackTimer = seconds;
   }
 
+  private startMatchClearAnimationForPendingRemoval(path: TilePath): void {
+    if (!this.pendingRemoval || !this.layout) {
+      this.pendingRemovalUsedClearFall = false;
+      this.executeRemoval();
+      return;
+    }
+
+    const [a, b] = this.pendingRemoval;
+    const firstCell = this.gameState.board.cells[a.row][a.col];
+    const secondCell = this.gameState.board.cells[b.row][b.col];
+
+    if (
+      firstCell.kind !== CellKind.Tile ||
+      secondCell.kind !== CellKind.Tile ||
+      firstCell.tileType === null ||
+      secondCell.tileType === null
+    ) {
+      this.pendingRemovalUsedClearFall = false;
+      this.executeRemoval();
+      return;
+    }
+
+    const pathPoints = path.map((coord) => ({
+      x: this.layout.offsetX + (coord.col + 0.5) * this.layout.cellSize,
+      y: this.layout.offsetY + (coord.row + 0.5) * this.layout.cellSize,
+    }));
+    const { segmentLengths, totalLength } = this.measurePath(pathPoints);
+    if (pathPoints.length < 2 || totalLength <= 0.01) {
+      this.pendingRemovalUsedClearFall = false;
+      this.executeRemoval();
+      return;
+    }
+
+    const meetDistance = totalLength * 0.5;
+    const collisionPoint = this.samplePathPoint(pathPoints, segmentLengths, meetDistance);
+    const firstStart = this.samplePathPoint(pathPoints, segmentLengths, 0);
+    const secondStart = this.samplePathPoint(pathPoints, segmentLengths, totalLength);
+
+    this.pendingRemovalUsedClearFall = true;
+    this.matchClearAnimation = {
+      phase: "approach",
+      pathPoints,
+      segmentLengths,
+      totalPathLength: totalLength,
+      meetDistance,
+      approachElapsedMs: 0,
+      approachDurationMs: GameScene.MATCH_CLEAR_APPROACH_DURATION_MS,
+      scatterElapsedMs: 0,
+      scatterDurationMs: GameScene.MATCH_CLEAR_SCATTER_DURATION_MS,
+      tiles: [
+        {
+          coord: { ...a },
+          tileType: firstCell.tileType,
+          x: firstStart.x,
+          y: firstStart.y,
+          vx: 0,
+          vy: 0,
+          rotationRad: 0,
+          rotationSpeedRad: 0,
+          alpha: 1,
+          scale: 1,
+        },
+        {
+          coord: { ...b },
+          tileType: secondCell.tileType,
+          x: secondStart.x,
+          y: secondStart.y,
+          vx: 0,
+          vy: 0,
+          rotationRad: 0,
+          rotationSpeedRad: 0,
+          alpha: 1,
+          scale: 1,
+        },
+      ],
+    };
+
+    // Keep the link visible while tiles travel on that exact path.
+    this.activePath = path;
+    this.pathDisplayTimer = Math.max(PATH_DISPLAY_DURATION, GameScene.MATCH_CLEAR_APPROACH_DURATION_MS + 40);
+  }
+
+  private updateMatchClearAnimation(dt: number, deltaMs: number): void {
+    const anim = this.matchClearAnimation;
+    if (!anim) {
+      return;
+    }
+
+    if (anim.phase === "approach") {
+      anim.approachElapsedMs += deltaMs;
+      const progress = Math.max(0, Math.min(1, anim.approachElapsedMs / anim.approachDurationMs));
+      const eased = this.easeInOutCubic(progress);
+      const firstDistance = anim.meetDistance * eased;
+      const secondDistance = anim.totalPathLength - anim.meetDistance * eased;
+      const firstPos = this.samplePathPoint(anim.pathPoints, anim.segmentLengths, firstDistance);
+      const secondPos = this.samplePathPoint(anim.pathPoints, anim.segmentLengths, secondDistance);
+
+      anim.tiles[0].x = firstPos.x;
+      anim.tiles[0].y = firstPos.y;
+      anim.tiles[1].x = secondPos.x;
+      anim.tiles[1].y = secondPos.y;
+      anim.tiles[0].rotationRad = eased * -0.16;
+      anim.tiles[1].rotationRad = eased * 0.16;
+
+      if (progress >= 1) {
+        this.startMatchClearScatter(anim);
+      }
+      return;
+    }
+
+    anim.scatterElapsedMs += deltaMs;
+    const scatterProgress = Math.max(0, Math.min(1, anim.scatterElapsedMs / anim.scatterDurationMs));
+    const fade = Math.max(0, 1 - Math.pow(scatterProgress, 1.18));
+
+    for (const tile of anim.tiles) {
+      tile.vy += GameScene.MATCH_CLEAR_SCATTER_GRAVITY_PX_S2 * dt;
+      tile.x += tile.vx * dt;
+      tile.y += tile.vy * dt;
+      tile.rotationRad += tile.rotationSpeedRad * dt;
+      tile.alpha = fade;
+      tile.scale = Math.max(0.72, 1 - scatterProgress * 0.28);
+    }
+
+    if (scatterProgress >= 1 || anim.tiles.every((tile) => tile.alpha <= 0.01)) {
+      this.matchClearAnimation = null;
+    }
+  }
+
+  private startMatchClearScatter(anim: MatchClearAnimation): void {
+    const collisionPoint = this.samplePathPoint(anim.pathPoints, anim.segmentLengths, anim.meetDistance);
+    const tangent = this.samplePathTangent(anim.pathPoints, anim.segmentLengths, anim.meetDistance);
+    const normal = { x: -tangent.y, y: tangent.x };
+    const normalLength = Math.hypot(normal.x, normal.y) || 1;
+    const nx = normal.x / normalLength;
+    const ny = normal.y / normalLength;
+
+    const spreadOffset = Math.max(6, this.layout.cellSize * 0.12);
+    anim.tiles[0].x = collisionPoint.x + nx * spreadOffset;
+    anim.tiles[0].y = collisionPoint.y + ny * spreadOffset;
+    anim.tiles[1].x = collisionPoint.x - nx * spreadOffset;
+    anim.tiles[1].y = collisionPoint.y - ny * spreadOffset;
+
+    const lateral = GameScene.MATCH_CLEAR_SCATTER_SPEED_PX_S;
+    const forwardKick = 55;
+    const liftBase = GameScene.MATCH_CLEAR_SCATTER_LIFT_PX_S;
+    anim.tiles[0].vx = nx * lateral + tangent.x * forwardKick;
+    anim.tiles[1].vx = -nx * lateral - tangent.x * forwardKick;
+    anim.tiles[0].vy = -liftBase + Math.random() * 40;
+    anim.tiles[1].vy = -liftBase + Math.random() * 40;
+    anim.tiles[0].rotationSpeedRad = -(2.2 + Math.random() * 1.2);
+    anim.tiles[1].rotationSpeedRad = 2.2 + Math.random() * 1.2;
+    anim.tiles[0].alpha = 1;
+    anim.tiles[1].alpha = 1;
+    anim.tiles[0].scale = 1;
+    anim.tiles[1].scale = 1;
+
+    anim.phase = "scatter";
+    anim.scatterElapsedMs = 0;
+    this.activePath = null;
+    this.pathDisplayTimer = 0;
+  }
+
+  private measurePath(points: Array<{ x: number; y: number }>): { segmentLengths: number[]; totalLength: number } {
+    const segmentLengths: number[] = [];
+    let totalLength = 0;
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const dx = points[i + 1].x - points[i].x;
+      const dy = points[i + 1].y - points[i].y;
+      const len = Math.hypot(dx, dy);
+      segmentLengths.push(len);
+      totalLength += len;
+    }
+
+    return { segmentLengths, totalLength };
+  }
+
+  private samplePathPoint(
+    points: Array<{ x: number; y: number }>,
+    segmentLengths: number[],
+    distance: number
+  ): { x: number; y: number } {
+    if (points.length === 0) {
+      return { x: 0, y: 0 };
+    }
+    if (points.length === 1 || segmentLengths.length === 0) {
+      return { ...points[0] };
+    }
+
+    const totalLength = segmentLengths.reduce((sum, len) => sum + len, 0);
+    const target = Math.max(0, Math.min(distance, totalLength));
+    let walked = 0;
+
+    for (let i = 0; i < segmentLengths.length; i++) {
+      const segLen = segmentLengths[i];
+      const nextWalked = walked + segLen;
+      if (target <= nextWalked || i === segmentLengths.length - 1) {
+        const local = segLen > 0 ? (target - walked) / segLen : 0;
+        return {
+          x: points[i].x + (points[i + 1].x - points[i].x) * local,
+          y: points[i].y + (points[i + 1].y - points[i].y) * local,
+        };
+      }
+      walked = nextWalked;
+    }
+
+    return { ...points[points.length - 1] };
+  }
+
+  private samplePathTangent(
+    points: Array<{ x: number; y: number }>,
+    segmentLengths: number[],
+    distance: number
+  ): { x: number; y: number } {
+    if (points.length < 2 || segmentLengths.length === 0) {
+      return { x: 1, y: 0 };
+    }
+
+    const totalLength = segmentLengths.reduce((sum, len) => sum + len, 0);
+    const target = Math.max(0, Math.min(distance, totalLength));
+    let walked = 0;
+
+    for (let i = 0; i < segmentLengths.length; i++) {
+      const segLen = segmentLengths[i];
+      const nextWalked = walked + segLen;
+      if ((target <= nextWalked && segLen > 0) || i === segmentLengths.length - 1) {
+        const dx = points[i + 1].x - points[i].x;
+        const dy = points[i + 1].y - points[i].y;
+        const len = Math.hypot(dx, dy) || 1;
+        return { x: dx / len, y: dy / len };
+      }
+      walked = nextWalked;
+    }
+
+    return { x: 1, y: 0 };
+  }
+
+  private easeInOutCubic(t: number): number {
+    if (t <= 0.5) {
+      return 4 * t * t * t;
+    }
+    const f = -2 * t + 2;
+    return 1 - (f * f * f) / 2;
+  }
+
+  private getMatchClearRenderItems(): FallingTileRenderItem[] {
+    if (!this.matchClearAnimation) {
+      return [];
+    }
+
+    return this.matchClearAnimation.tiles.map((tile) => ({
+      x: tile.x,
+      y: tile.y,
+      tileType: tile.tileType,
+      alpha: tile.alpha,
+      rotationRad: tile.rotationRad,
+      scale: tile.scale,
+    }));
+  }
+
+  private getHiddenBoardCoordsForMatchClear(): Coord[] {
+    if (!this.matchClearAnimation) {
+      return [];
+    }
+
+    return this.matchClearAnimation.tiles.map((tile) => tile.coord);
+  }
+
   /**
    * Match pipeline order:
    * 1. Remove
@@ -908,6 +1221,9 @@ export class GameScene extends Phaser.Scene {
     if (!this.pendingRemoval) return;
 
     const [a, b] = this.pendingRemoval;
+    const usedClearFall = this.pendingRemovalUsedClearFall;
+    this.pendingRemovalUsedClearFall = false;
+    this.matchClearAnimation = null;
     const tutorialMatchBoard = this.tutorialEnabled ? this.tutorialActiveBoard : null;
     const matchedType = this.gameState.board.cells[a.row][a.col].tileType;
     const firstCell = this.gameState.board.cells[a.row][a.col];
@@ -945,6 +1261,7 @@ export class GameScene extends Phaser.Scene {
     // Show merge-pull only when the board stayed spatially stable this frame.
     const boardReflowed = gravityMoves.length > 0 || jumperMoves.length > 0;
     if (
+      !usedClearFall &&
       !boardReflowed &&
       matchedType !== null &&
       firstCell.tileType !== null &&
@@ -993,6 +1310,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.pendingRemoval = null;
+    this.pendingRemovalUsedClearFall = false;
     this.hintPath = null;
     this.hintPathTimerMs = 0;
     this.gameState.inputLocked = false;
@@ -1138,6 +1456,7 @@ export class GameScene extends Phaser.Scene {
 
     ctx.setTransform(this.renderPixelRatio, 0, 0, this.renderPixelRatio, 0, 0);
     this.drawSceneBackground(ctx, w, h);
+    const hiddenCoords = this.getHiddenBoardCoordsForMatchClear();
 
     drawBoard(
       ctx,
@@ -1150,7 +1469,14 @@ export class GameScene extends Phaser.Scene {
       this.monkeyImage,
       this.iceOverlayImage,
       this.getMergePullRenderItems(),
-      this.getGravitySlideRenderItems()
+      this.getGravitySlideRenderItems(),
+      hiddenCoords
+    );
+    drawFallingTiles(
+      ctx,
+      this.layout.cellSize,
+      this.getMatchClearRenderItems(),
+      this.resolveTileImage
     );
     this.drawKeyboardCursor(ctx);
     this.hintButton.setDisabled(
@@ -1436,6 +1762,7 @@ export class GameScene extends Phaser.Scene {
     this.gameState.selectedTile = null;
     this.gameState.inputLocked = false;
     this.pendingRemoval = null;
+    this.pendingRemovalUsedClearFall = false;
     this.noMovesWarning = false;
     this.activePath = null;
     this.pathDisplayTimer = 0;
@@ -2003,6 +2330,9 @@ export class GameScene extends Phaser.Scene {
     this.hintFeedbackTimer = 0;
     this.activePath = null;
     this.pathDisplayTimer = 0;
+    this.pendingRemoval = null;
+    this.pendingRemovalUsedClearFall = false;
+    this.matchClearAnimation = null;
     this.pauseForStartScreen();
     this.triggerHaptic("light");
   }
@@ -2021,6 +2351,9 @@ export class GameScene extends Phaser.Scene {
     this.hintFeedbackTimer = 0;
     this.activePath = null;
     this.pathDisplayTimer = 0;
+    this.pendingRemoval = null;
+    this.pendingRemovalUsedClearFall = false;
+    this.matchClearAnimation = null;
     this.noMovesWarning = false;
     this.restartLevel();
     this.setSceneInputEnabled(!this.settingsOpen && !this.startScreen.isVisible());

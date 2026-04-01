@@ -29,6 +29,15 @@ export interface GravitySlideRenderItem {
   progress: number; // 0..1
 }
 
+export interface FallingTileRenderItem {
+  x: number;
+  y: number;
+  tileType: TileTypeId;
+  alpha: number; // 0..1
+  rotationRad: number;
+  scale: number;
+}
+
 export function calculateLayout(
   displayW: number,
   displayH: number,
@@ -116,9 +125,14 @@ export function drawBoard(
   jumpingBlockerImage?: CanvasImageSource | null,
   frozenOverlayImage?: CanvasImageSource | null,
   mergePullItems?: MergePullRenderItem[],
-  gravitySlideItems?: GravitySlideRenderItem[]
+  gravitySlideItems?: GravitySlideRenderItem[],
+  hiddenTileCoords?: Coord[]
 ): void {
   const { offsetX, offsetY, cellSize } = layout;
+  const hiddenCoordKeys =
+    hiddenTileCoords && hiddenTileCoords.length > 0
+      ? new Set(hiddenTileCoords.map((coord) => `${coord.row},${coord.col}`))
+      : null;
 
   drawGridGlassBackdrop(
     ctx,
@@ -137,6 +151,12 @@ export function drawBoard(
       const cx = offsetX + (col + 0.5) * cellSize;
       const cy = offsetY + (row + 0.5) * cellSize;
       const radius = size * 0.32;
+      const isHidden = hiddenCoordKeys?.has(`${row},${col}`) ?? false;
+
+      if (isHidden) {
+        drawEmptyCellPortal(ctx, x, y, size, row, col);
+        continue;
+      }
 
       if (cell.kind === CellKind.Empty) {
         drawEmptyCellPortal(ctx, x, y, size, row, col);
@@ -197,6 +217,37 @@ export function drawBoard(
       resolveTileImage,
       frozenOverlayImage ?? null
     );
+  }
+}
+
+export function drawFallingTiles(
+  ctx: CanvasRenderingContext2D,
+  cellSize: number,
+  items: FallingTileRenderItem[],
+  resolveTileImage?: TileImageResolver
+): void {
+  if (items.length === 0) {
+    return;
+  }
+
+  const radius = Math.max(8, cellSize * 0.32);
+  for (const item of items) {
+    const alpha = clamp01(item.alpha);
+    if (alpha <= 0) {
+      continue;
+    }
+
+    const scale = Math.max(0.12, item.scale);
+    ctx.save();
+    ctx.translate(item.x, item.y);
+    ctx.rotate(item.rotationRad);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
+    ctx.shadowBlur = Math.max(4, cellSize * 0.14);
+    ctx.shadowOffsetY = Math.max(2, cellSize * 0.06);
+    drawTileSprite(ctx, item.tileType, 0, 0, radius, cellSize, resolveTileImage, 0, 0);
+    ctx.restore();
   }
 }
 
