@@ -18,14 +18,16 @@ import { createBoard, countRemainingTiles, removeTiles, reshuffleBoardTiles } fr
 import { findPath, hasAnyValidPair } from "../game/pathfinder";
 import { resolveGravity } from "../game/gravity";
 import { unfreezeNeighbors } from "../game/frozen";
-import { moveJumpingBlockers } from "../game/jumper";
+import { JumpMove, moveJumpingBlockers } from "../game/jumper";
 import {
   FallingTileRenderItem,
   GravitySlideRenderItem,
+  JumperFlightRenderItem,
   MergePullRenderItem,
   calculateLayout,
   drawBoard,
   drawFallingTiles,
+  drawJumperFlights,
 } from "../render/board-renderer";
 import { LEVELS } from "../levels/level-data";
 import { LevelProgression } from "../levels/progression";
@@ -187,6 +189,14 @@ interface GravitySlideAnimation {
   durationMs: number;
 }
 
+interface JumperJumpAnimation {
+  from: Coord;
+  to: Coord;
+  elapsedMs: number;
+  durationMs: number;
+  arcHeightPx: number;
+}
+
 interface MatchClearTileAnimation {
   coord: Coord;
   tileType: number;
@@ -264,6 +274,10 @@ export class GameScene extends Phaser.Scene {
   private static readonly GRAVITY_SLIDE_PER_CELL_MS = 34;
   private static readonly MAX_GRAVITY_SLIDE_DURATION_MS = 220;
   private static readonly MAX_GRAVITY_SLIDE_ANIMATIONS = 64;
+  private static readonly JUMPER_JUMP_BASE_DURATION_MS = 270;
+  private static readonly JUMPER_JUMP_PER_CELL_MS = 44;
+  private static readonly JUMPER_JUMP_MAX_DURATION_MS = 520;
+  private static readonly MAX_JUMPER_JUMP_ANIMATIONS = 24;
   private static readonly MATCH_CLEAR_APPROACH_DURATION_MS = 220;
   private static readonly MATCH_CLEAR_SCATTER_DURATION_MS = 430;
   private static readonly MATCH_CLEAR_SCATTER_GRAVITY_PX_S2 = 2750;
@@ -331,6 +345,7 @@ export class GameScene extends Phaser.Scene {
   private keyboardCursor: Coord | null = null;
   private mergePullAnimations: MergePullAnimation[] = [];
   private gravitySlideAnimations: GravitySlideAnimation[] = [];
+  private jumperJumpAnimations: JumperJumpAnimation[] = [];
   private matchClearAnimation: MatchClearAnimation | null = null;
 
   constructor() {
@@ -487,6 +502,7 @@ export class GameScene extends Phaser.Scene {
     this.tileImagesByTextureKey.clear();
     this.mergePullAnimations = [];
     this.gravitySlideAnimations = [];
+    this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
     this.monkeyImage = null;
     this.iceOverlayImage = null;
@@ -541,6 +557,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingRemovalUsedClearFall = false;
     this.mergePullAnimations = [];
     this.gravitySlideAnimations = [];
+    this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
 
     this.recalculateLayout();
@@ -711,6 +728,11 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.gravitySlideAnimations.length > 0) {
       this.gravitySlideAnimations = this.gravitySlideAnimations
+        .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
+        .filter((anim) => anim.elapsedMs < anim.durationMs);
+    }
+    if (this.jumperJumpAnimations.length > 0) {
+      this.jumperJumpAnimations = this.jumperJumpAnimations
         .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
         .filter((anim) => anim.elapsedMs < anim.durationMs);
     }
@@ -1255,6 +1277,7 @@ export class GameScene extends Phaser.Scene {
 
     const jumperMoves = moveJumpingBlockers(this.gameState.board);
     if (jumperMoves.length > 0) {
+      this.startJumperJumpAnimations(jumperMoves);
       this.audio.play(GAME_SOUNDS.JUMPER_MOVE);
     }
 
@@ -1296,12 +1319,18 @@ export class GameScene extends Phaser.Scene {
       if (recovered && this.gravitySlideAnimations.length > 0) {
         this.gravitySlideAnimations = [];
       }
+      if (recovered && this.jumperJumpAnimations.length > 0) {
+        this.jumperJumpAnimations = [];
+      }
       this.noMovesWarning = !recovered;
       if (!recovered) {
         this.audio.play(GAME_SOUNDS.NO_MOVES_WARNING);
         this.finalizeRunScore();
         if (this.gravitySlideAnimations.length > 0) {
           this.gravitySlideAnimations = [];
+        }
+        if (this.jumperJumpAnimations.length > 0) {
+          this.jumperJumpAnimations = [];
         }
       }
       this.triggerHaptic("medium");
@@ -1408,6 +1437,69 @@ export class GameScene extends Phaser.Scene {
     }));
   }
 
+  private startJumperJumpAnimations(moves: JumpMove[]): void {
+    if (moves.length === 0 || !this.layout) {
+      return;
+    }
+
+    const additions: JumperJumpAnimation[] = [];
+    for (const move of moves) {
+      const distance =
+        Math.abs(move.from.row - move.to.row) + Math.abs(move.from.col - move.to.col);
+      const durationMs = Math.max(
+        GameScene.JUMPER_JUMP_BASE_DURATION_MS,
+        Math.min(
+          GameScene.JUMPER_JUMP_MAX_DURATION_MS,
+          GameScene.JUMPER_JUMP_BASE_DURATION_MS + distance * GameScene.JUMPER_JUMP_PER_CELL_MS
+        )
+      );
+      const arcHeightPx = Math.max(
+        this.layout.cellSize * 0.44,
+        Math.min(this.layout.cellSize * 1.15, this.layout.cellSize * (0.56 + distance * 0.09))
+      );
+
+      additions.push({
+        from: { ...move.from },
+        to: { ...move.to },
+        elapsedMs: 0,
+        durationMs,
+        arcHeightPx,
+      });
+    }
+
+    if (additions.length === 0) {
+      return;
+    }
+
+    this.jumperJumpAnimations.push(...additions);
+    if (this.jumperJumpAnimations.length > GameScene.MAX_JUMPER_JUMP_ANIMATIONS) {
+      this.jumperJumpAnimations.splice(
+        0,
+        this.jumperJumpAnimations.length - GameScene.MAX_JUMPER_JUMP_ANIMATIONS
+      );
+    }
+  }
+
+  private getJumperJumpRenderItems(): JumperFlightRenderItem[] {
+    if (this.jumperJumpAnimations.length === 0) {
+      return [];
+    }
+
+    return this.jumperJumpAnimations.map((anim) => ({
+      from: anim.from,
+      to: anim.to,
+      progress: Math.max(0, Math.min(1, anim.elapsedMs / anim.durationMs)),
+      arcHeightPx: anim.arcHeightPx,
+    }));
+  }
+
+  private getHiddenBoardCoordsForJumperJumps(): Coord[] {
+    if (this.jumperJumpAnimations.length === 0) {
+      return [];
+    }
+    return this.jumperJumpAnimations.map((anim) => anim.to);
+  }
+
   /** Haptic hook (Oasiz). */
   private triggerHaptic(pattern: string): void {
     triggerOasizHaptic(pattern, this.settings.hapticsEnabled);
@@ -1458,7 +1550,14 @@ export class GameScene extends Phaser.Scene {
 
     ctx.setTransform(this.renderPixelRatio, 0, 0, this.renderPixelRatio, 0, 0);
     this.drawSceneBackground(ctx, w, h);
-    const hiddenCoords = this.getHiddenBoardCoordsForMatchClear();
+    const hiddenCoordMap = new Map<string, Coord>();
+    for (const coord of this.getHiddenBoardCoordsForMatchClear()) {
+      hiddenCoordMap.set(`${coord.row},${coord.col}`, coord);
+    }
+    for (const coord of this.getHiddenBoardCoordsForJumperJumps()) {
+      hiddenCoordMap.set(`${coord.row},${coord.col}`, coord);
+    }
+    const hiddenCoords = Array.from(hiddenCoordMap.values());
 
     drawBoard(
       ctx,
@@ -1473,6 +1572,13 @@ export class GameScene extends Phaser.Scene {
       this.getMergePullRenderItems(),
       this.getGravitySlideRenderItems(),
       hiddenCoords
+    );
+    drawJumperFlights(
+      ctx,
+      this.layout,
+      this.layout.cellSize,
+      this.getJumperJumpRenderItems(),
+      this.monkeyImage
     );
     drawFallingTiles(
       ctx,
@@ -1766,6 +1872,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingRemoval = null;
     this.pendingRemovalUsedClearFall = false;
     this.noMovesWarning = false;
+    this.jumperJumpAnimations = [];
     this.activePath = null;
     this.pathDisplayTimer = 0;
     this.hintPath = null;
@@ -2334,6 +2441,7 @@ export class GameScene extends Phaser.Scene {
     this.pathDisplayTimer = 0;
     this.pendingRemoval = null;
     this.pendingRemovalUsedClearFall = false;
+    this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
     this.pauseForStartScreen();
     this.triggerHaptic("light");
@@ -2355,6 +2463,7 @@ export class GameScene extends Phaser.Scene {
     this.pathDisplayTimer = 0;
     this.pendingRemoval = null;
     this.pendingRemovalUsedClearFall = false;
+    this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
     this.noMovesWarning = false;
     this.restartLevel();

@@ -38,6 +38,13 @@ export interface FallingTileRenderItem {
   scale: number;
 }
 
+export interface JumperFlightRenderItem {
+  from: Coord;
+  to: Coord;
+  progress: number; // 0..1
+  arcHeightPx: number;
+}
+
 export function calculateLayout(
   displayW: number,
   displayH: number,
@@ -251,6 +258,55 @@ export function drawFallingTiles(
   }
 }
 
+export function drawJumperFlights(
+  ctx: CanvasRenderingContext2D,
+  layout: BoardLayout,
+  cellSize: number,
+  items: JumperFlightRenderItem[],
+  jumpingBlockerImage?: CanvasImageSource | null
+): void {
+  if (items.length === 0) {
+    return;
+  }
+
+  const radius = Math.max(8, cellSize * 0.32);
+  for (const item of items) {
+    const t = clamp01(item.progress);
+    if (t <= 0 || t >= 1) {
+      continue;
+    }
+
+    const fromCenter = coordToPixel(item.from, layout);
+    const toCenter = coordToPixel(item.to, layout);
+    const lead = sampleJumperArcPoint(fromCenter, toCenter, t, item.arcHeightPx);
+    const tailT = Math.max(0, t - 0.24);
+    const tail = sampleJumperArcPoint(fromCenter, toCenter, tailT, item.arcHeightPx);
+    const midT = (tailT + t) * 0.5;
+    const control = sampleJumperArcPoint(fromCenter, toCenter, midT, item.arcHeightPx * 0.94);
+    const trailAlpha = (1 - t) * 0.6;
+
+    ctx.save();
+    ctx.globalAlpha = trailAlpha;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = Math.max(1.2, cellSize * 0.04);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(tail.x, tail.y);
+    ctx.quadraticCurveTo(control.x, control.y, lead.x, lead.y);
+    ctx.stroke();
+    ctx.restore();
+
+    drawJumpingBlocker(
+      ctx,
+      lead.x,
+      lead.y,
+      radius,
+      cellSize,
+      jumpingBlockerImage ?? null
+    );
+  }
+}
+
 function drawGridGlassBackdrop(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -394,6 +450,18 @@ function drawMergePullEffects(
       ctx.restore();
     }
   }
+}
+
+function sampleJumperArcPoint(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  t: number,
+  arcHeightPx: number
+): { x: number; y: number } {
+  const x = lerp(from.x, to.x, t);
+  const yLinear = lerp(from.y, to.y, t);
+  const arcLift = Math.sin(Math.PI * t) * arcHeightPx;
+  return { x, y: yLinear - arcLift };
 }
 
 function drawGravitySlideEffects(
