@@ -12,24 +12,11 @@ interface LevelSelectState {
   totalLevels: number;
 }
 
-interface CategoryDef {
-  id: "foods" | "landmarks" | "planets";
-  label: string;
-  startLevel: number;
-  endLevel: number;
-}
-
 export interface AlbumEntry {
   photoId: number;
   src: string;
   unlocked: boolean;
 }
-
-const LEVEL_CATEGORIES: CategoryDef[] = [
-  { id: "foods", label: "Foods", startLevel: 1, endLevel: 10 },
-  { id: "landmarks", label: "Landmarks", startLevel: 11, endLevel: 20 },
-  { id: "planets", label: "Planets", startLevel: 21, endLevel: 30 },
-];
 
 export class StartScreen {
   private readonly root: HTMLDivElement;
@@ -45,7 +32,7 @@ export class StartScreen {
   private readonly sectionsOverlay: HTMLDivElement;
   private readonly sectionsPanel: HTMLDivElement;
   private readonly sectionsCloseButton: HTMLButtonElement;
-  private readonly categoryButtons: HTMLButtonElement[] = [];
+  private readonly sectionsGrid: HTMLDivElement;
   private readonly levelButtons: HTMLButtonElement[] = [];
   private readonly albumOverlay: HTMLDivElement;
   private readonly albumPanel: HTMLDivElement;
@@ -60,7 +47,6 @@ export class StartScreen {
   private readonly albumViewerZoomOutButton: HTMLButtonElement;
   private readonly albumViewerZoomResetButton: HTMLButtonElement;
   private readonly albumViewerZoomInButton: HTMLButtonElement;
-  private activeCategoryIndex = 0;
   private sectionsOpen = false;
   private albumOpen = false;
   private albumViewerOpen = false;
@@ -215,42 +201,11 @@ export class StartScreen {
 
     sectionsHeader.append(sectionsHeadingWrap, this.sectionsCloseButton);
 
-    const categoryRow = document.createElement("div");
-    categoryRow.className = "sections-category-row";
-    for (let i = 0; i < LEVEL_CATEGORIES.length; i++) {
-      const category = LEVEL_CATEGORIES[i];
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "sections-category-btn";
-      button.textContent = category.label;
-      button.addEventListener("click", () => {
-        this.onUiClick?.();
-        this.activeCategoryIndex = i;
-        this.renderSections();
-      });
-      this.categoryButtons.push(button);
-      categoryRow.appendChild(button);
-    }
+    this.sectionsGrid = document.createElement("div");
+    this.sectionsGrid.className = "sections-grid";
+    this.syncLevelButtons();
 
-    const grid = document.createElement("div");
-    grid.className = "sections-grid";
-    for (let i = 0; i < 10; i++) {
-      const levelButton = document.createElement("button");
-      levelButton.type = "button";
-      levelButton.className = "sections-level-btn";
-
-      const levelNumber = document.createElement("span");
-      levelNumber.className = "sections-level-number";
-      const levelState = document.createElement("span");
-      levelState.className = "sections-level-state";
-
-      levelButton.append(levelNumber, levelState);
-      levelButton.addEventListener("click", () => this.handleLevelPick(i));
-      this.levelButtons.push(levelButton);
-      grid.appendChild(levelButton);
-    }
-
-    this.sectionsPanel.append(sectionsHeader, categoryRow, grid);
+    this.sectionsPanel.append(sectionsHeader, this.sectionsGrid);
     this.sectionsOverlay.appendChild(this.sectionsPanel);
 
     this.albumOverlay = document.createElement("div");
@@ -404,10 +359,6 @@ export class StartScreen {
       totalLevels: Math.max(1, next.totalLevels),
     };
 
-    if (!this.sectionsOpen) {
-      this.activeCategoryIndex = this.findCategoryIndexForLevel(this.levelState.currentLevel);
-    }
-
     this.renderSections();
   }
 
@@ -482,6 +433,8 @@ export class StartScreen {
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
     const overlaySidePadding = 14;
+    const levelsTopInset = metrics.isMobile ? "6vh" : "4vh";
+    const levelsBottomInset = metrics.isMobile ? "9vh" : "6vh";
     const albumTopInset = metrics.isMobile ? "6vh" : "4vh";
     const albumBottomInset = metrics.isMobile ? "9vh" : "6vh";
     const safeTopCss = getSafeTopOffsetCss(0);
@@ -505,12 +458,13 @@ export class StartScreen {
 
     // Keep levels modal below platform overlays (safe top) on all screens.
     this.sectionsOverlay.style.alignItems = "flex-start";
-    this.sectionsOverlay.style.paddingTop = safeTopCss;
+    this.sectionsOverlay.style.paddingTop = `calc(${safeTopCss} + ${levelsTopInset})`;
     this.sectionsOverlay.style.paddingRight = `${overlaySidePadding}px`;
-    this.sectionsOverlay.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px)`;
+    this.sectionsOverlay.style.paddingBottom =
+      `calc(env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px + ${levelsBottomInset})`;
     this.sectionsOverlay.style.paddingLeft = `${overlaySidePadding}px`;
     this.sectionsPanel.style.maxHeight =
-      `calc(100vh - (${safeTopCss}) - (env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px))`;
+      `calc(100vh - (${safeTopCss}) - env(safe-area-inset-bottom, 0px) - ${levelsTopInset} - ${levelsBottomInset} - ${overlaySidePadding}px)`;
 
     this.albumOverlay.style.alignItems = "flex-start";
     this.albumOverlay.style.paddingTop = `calc(${safeTopCss} + ${albumTopInset})`;
@@ -523,21 +477,15 @@ export class StartScreen {
   }
 
   private renderSections(): void {
-    const activeCategory = LEVEL_CATEGORIES[this.activeCategoryIndex];
-    this.sectionsPanel.dataset.theme = activeCategory.id;
-
-    for (let i = 0; i < this.categoryButtons.length; i++) {
-      this.categoryButtons[i].setAttribute("aria-pressed", i === this.activeCategoryIndex ? "true" : "false");
-      this.categoryButtons[i].classList.toggle("active", i === this.activeCategoryIndex);
-    }
+    this.syncLevelButtons();
 
     for (let i = 0; i < this.levelButtons.length; i++) {
-      const levelId = activeCategory.startLevel + i;
+      const levelId = i + 1;
       const button = this.levelButtons[i];
       const numberNode = button.firstElementChild as HTMLSpanElement;
       const stateNode = button.lastElementChild as HTMLSpanElement;
 
-      const inRange = levelId <= this.levelState.totalLevels && levelId <= activeCategory.endLevel;
+      const inRange = levelId <= this.levelState.totalLevels;
       button.style.display = inRange ? "flex" : "none";
       if (!inRange) {
         continue;
@@ -616,7 +564,6 @@ export class StartScreen {
 
   private openSections(): void {
     this.closeAlbum();
-    this.activeCategoryIndex = this.findCategoryIndexForLevel(this.levelState.currentLevel);
     this.renderSections();
     this.sectionsOpen = true;
     this.sectionsOverlay.classList.add("is-open");
@@ -759,17 +706,27 @@ export class StartScreen {
     return this.getViewerFocusFromClientPoint(midX, midY);
   }
 
-  private findCategoryIndexForLevel(levelId: number): number {
-    const index = LEVEL_CATEGORIES.findIndex(
-      (category) => levelId >= category.startLevel && levelId <= category.endLevel
-    );
-    return index >= 0 ? index : 0;
+  private syncLevelButtons(): void {
+    while (this.levelButtons.length < this.levelState.totalLevels) {
+      const levelId = this.levelButtons.length + 1;
+      const levelButton = document.createElement("button");
+      levelButton.type = "button";
+      levelButton.className = "sections-level-btn";
+
+      const levelNumber = document.createElement("span");
+      levelNumber.className = "sections-level-number";
+      const levelState = document.createElement("span");
+      levelState.className = "sections-level-state";
+
+      levelButton.append(levelNumber, levelState);
+      levelButton.addEventListener("click", () => this.handleLevelPick(levelId));
+      this.levelButtons.push(levelButton);
+      this.sectionsGrid.appendChild(levelButton);
+    }
   }
 
-  private handleLevelPick(slotIndex: number): void {
-    const category = LEVEL_CATEGORIES[this.activeCategoryIndex];
-    const levelId = category.startLevel + slotIndex;
-    if (levelId > this.levelState.totalLevels || levelId > category.endLevel) {
+  private handleLevelPick(levelId: number): void {
+    if (levelId > this.levelState.totalLevels) {
       return;
     }
     if (levelId > this.levelState.unlockedThroughLevel) {

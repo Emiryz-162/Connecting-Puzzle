@@ -43,13 +43,9 @@ export const ALL_TILE_THEME_DEFINITIONS: TileThemeDefinition[] = THEME_IDS.map(
 );
 
 export function getThemeForLevel(level: number): TileThemeId {
-  if (level <= 10) {
-    return "foods";
-  }
-  if (level <= 20) {
-    return "landmarks";
-  }
-  return "planets";
+  const normalizedLevel = Math.max(1, Math.floor(level));
+  const index = (normalizedLevel - 1) % THEME_IDS.length;
+  return THEME_IDS[index];
 }
 
 export function getTextureKeyForThemeTile(theme: TileThemeId, tileType: number): string {
@@ -57,4 +53,3 @@ export function getTextureKeyForThemeTile(theme: TileThemeId, tileType: number):
   const safeIndex = ((tileType % keys.length) + keys.length) % keys.length;
   return keys[safeIndex];
 }
-
