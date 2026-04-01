@@ -868,6 +868,7 @@ export class GameScene extends Phaser.Scene {
     this.hintFeedbackText = null;
     this.hintFeedbackTimer = 0;
 
+    this.audio.play(GAME_SOUNDS.TILE_MATCH_SUCCESS);
     this.triggerHaptic("light");
     this.startMatchClearAnimationForPendingRemoval(path);
   }
@@ -1069,6 +1070,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startMatchClearScatter(anim: MatchClearAnimation): void {
+    this.audio.play(GAME_SOUNDS.TILE_POP);
+
     const collisionPoint = this.samplePathPoint(anim.pathPoints, anim.segmentLengths, anim.meetDistance);
     const tangent = this.samplePathTangent(anim.pathPoints, anim.segmentLengths, anim.meetDistance);
     const normal = { x: -tangent.y, y: tangent.x };
@@ -1234,7 +1237,6 @@ export class GameScene extends Phaser.Scene {
     const isChainMatch =
       this.lastSuccessfulMatchAtMs > 0 &&
       nowMs - this.lastSuccessfulMatchAtMs <= GameScene.MATCH_CHAIN_WINDOW_MS;
-    this.audio.play(GAME_SOUNDS.TILE_MATCH_SUCCESS);
     this.lastSuccessfulMatchAtMs = nowMs;
     this.runScore += MATCH_SCORE_PER_PAIR;
     this.gameState.score = this.runScore;

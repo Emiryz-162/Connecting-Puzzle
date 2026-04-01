@@ -4,6 +4,7 @@ export const GAME_SOUNDS = {
   TILE_NO_MATCH: "tile_no_match",
   TILE_MATCH_SUCCESS: "tile_match_success",
   TILE_MATCH_CHAIN: "tile_match_chain",
+  TILE_POP: "tile_pop",
   FROZEN_BREAK: "frozen_break",
   GRAVITY_DROP: "gravity_drop",
   JUMPER_MOVE: "jumper_move",
@@ -59,6 +60,12 @@ const SOUND_CONFIG: Record<GameSoundName, SoundConfig> = {
     volume: 0.72,
     cooldownMs: 120,
     restartIfPlaying: false,
+  },
+  tile_pop: {
+    src: "/assets/sounds/tile_pop.wav",
+    volume: 0.76,
+    cooldownMs: 45,
+    restartIfPlaying: true,
   },
   frozen_break: {
     src: "/assets/sounds/frozen_break.wav",
