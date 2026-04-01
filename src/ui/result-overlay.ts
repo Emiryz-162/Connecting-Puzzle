@@ -162,7 +162,7 @@ export class ResultOverlay {
       border: "1px solid rgba(235, 134, 134, 0.34)",
       boxShadow: "0 10px 22px rgba(107, 79, 69, 0.22)",
       background: "rgba(255,255,255,0.45)",
-      aspectRatio: "16 / 9",
+      aspectRatio: "11 / 6",
     });
 
     this.unlockedPhotoImage = document.createElement("img");
