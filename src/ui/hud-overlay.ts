@@ -55,7 +55,7 @@ export class HudOverlay {
     });
 
     this.levelText = document.createElement("div");
-    this.levelText.textContent = "Level 1/30";
+    this.levelText.textContent = "Level 1/90";
     applyStyles(this.levelText, {
       minWidth: "88px",
       textAlign: "left",

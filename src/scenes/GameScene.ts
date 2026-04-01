@@ -70,9 +70,9 @@ import {
   getPhotoAssetPath,
 } from "../album/photo-album";
 
-// Test helper: change this to start directly from a specific level id (1..30).
+// Test helper: change this to start directly from a specific level id (1..LEVELS.length).
 const START_LEVEL_ID_FOR_TESTING = 1;
-const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
+const START_LEVEL_ID = Math.max(1, Math.min(LEVELS.length, START_LEVEL_ID_FOR_TESTING));
 const MATCH_SCORE_PER_PAIR = 100;
 const RANDOM_GRAVITY_DIRECTIONS: Exclude<BoardState["gravity"], "none">[] = [
   "up",

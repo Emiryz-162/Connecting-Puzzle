@@ -1,473 +1,354 @@
-import { LevelDef } from "../types";
+import { GravityDirection, LevelDef } from "../types";
 
-type PatternPayload = Pick<LevelDef, "width" | "height" | "layout">;
+interface BoardSizeBand {
+  start: number;
+  end: number;
+  width: number;
+  height: number;
+}
 
-function patternToLevel(rows: string[]): PatternPayload {
-  if (rows.length === 0) {
-    throw new Error("Pattern rows cannot be empty.");
+type DifficultyPhase =
+  | "classic"
+  | "gravity"
+  | "frozen"
+  | "monkey"
+  | "mixed"
+  | "hard"
+  | "nightmare";
+
+interface LayoutOptions {
+  seed: number;
+  frozenCount?: number;
+  emptyCount?: number;
+  solidCount?: number;
+  jumperCount?: number;
+}
+
+interface Coord {
+  row: number;
+  col: number;
+}
+
+const TOTAL_LEVELS = 90;
+const GRAVITY_CYCLE: Exclude<GravityDirection, "none">[] = ["down", "left", "up", "right"];
+
+const SIZE_BANDS: BoardSizeBand[] = [
+  { start: 1, end: 10, width: 3, height: 5 },
+  { start: 11, end: 40, width: 4, height: 5 },
+  { start: 41, end: 70, width: 5, height: 6 },
+  { start: 71, end: 90, width: 6, height: 8 },
+];
+
+function clampInt(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function createSeededRng(seed: number): () => number {
+  let state = seed >>> 0;
+  if (state === 0) {
+    state = 0x6d2b79f5;
   }
 
-  const width = rows[0].length;
-  const height = rows.length;
-  const layout: number[][] = [];
-
-  for (let row = 0; row < height; row++) {
-    const line = rows[row];
-    if (line.length !== width) {
-      throw new Error(`Pattern width mismatch at row ${row}.`);
-    }
-
-    const outRow: number[] = [];
-    for (let col = 0; col < width; col++) {
-      const ch = line[col];
-      switch (ch) {
-        case "T":
-          outRow.push(1);
-          break;
-        case ".":
-          outRow.push(0);
-          break;
-        case "#":
-          outRow.push(-1);
-          break;
-        case "*":
-          outRow.push(-2);
-          break;
-        case "J":
-          outRow.push(-3);
-          break;
-        default:
-          throw new Error(`Unknown pattern token '${ch}' at (${row},${col}).`);
-      }
-    }
-
-    layout.push(outRow);
-  }
-
-  return {
-    width,
-    height,
-    layout,
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
   };
 }
 
-export const LEVELS: LevelDef[] = [
-  // 1-7: 3x5 onboarding
-  {
-    id: 1,
-    gravity: "none",
-    timerSeconds: 130,
-    tileTypeCount: 3,
-    tutorialText: "Tap two matching tiles to connect them!",
-    ...patternToLevel([
-      "TTT",
-      "TTT",
-      "T.T",
-      "TTT",
-      "TTT",
-    ]),
-  },
-  {
-    id: 2,
-    gravity: "none",
-    timerSeconds: 126,
-    tileTypeCount: 3,
-    tutorialText: "Find clear routes with up to two turns.",
-    ...patternToLevel([
-      "TTT",
-      "TTT",
-      "T#T",
-      "TTT",
-      "TTT",
-    ]),
-  },
-  {
-    id: 3,
-    gravity: "none",
-    timerSeconds: 122,
-    tileTypeCount: 4,
-    ...patternToLevel([
-      "TTT",
-      "T#T",
-      "T.T",
-      "T#T",
-      "TTT",
-    ]),
-  },
-  {
-    id: 4,
-    gravity: "none",
-    timerSeconds: 118,
-    tileTypeCount: 4,
-    ...patternToLevel([
-      "TTT",
-      "T*T",
-      "T.T",
-      "T*T",
-      "TTT",
-    ]),
-  },
-  {
-    id: 5,
-    gravity: "none",
-    timerSeconds: 114,
-    tileTypeCount: 4,
-    ...patternToLevel([
-      "TTT",
-      "T#T",
-      "*.*",
-      "T#T",
-      "TTT",
-    ]),
-  },
-  {
-    id: 6,
-    gravity: "none",
-    timerSeconds: 110,
-    tileTypeCount: 5,
-    ...patternToLevel([
-      "TTT",
-      "TJT",
-      "T.T",
-      "TJT",
-      "TTT",
-    ]),
-  },
-  {
-    id: 7,
-    gravity: "none",
-    timerSeconds: 106,
-    tileTypeCount: 5,
-    ...patternToLevel([
-      "T#T",
-      "T*J",
-      "TT.",
-      "J*T",
-      "T#T",
-    ]),
-  },
-
-  // 8-15: 4x6 mid game + gravity intro
-  {
-    id: 8,
-    width: 4,
-    height: 6,
-    gravity: "none",
-    timerSeconds: 104,
-    tileTypeCount: 5,
-  },
-  {
-    id: 9,
-    width: 4,
-    height: 6,
-    gravity: "none",
-    timerSeconds: 102,
-    tileTypeCount: 5,
-  },
-  {
-    id: 10,
-    gravity: "none",
-    timerSeconds: 100,
-    tileTypeCount: 5,
-    ...patternToLevel([
-      "TTTT",
-      "T##T",
-      "TTTT",
-      "TTTT",
-      "T##T",
-      "TTTT",
-    ]),
-  },
-  {
-    id: 11,
-    gravity: "none",
-    timerSeconds: 98,
-    tileTypeCount: 6,
-    ...patternToLevel([
-      "TTTT",
-      "T..T",
-      "T##T",
-      "TTTT",
-      "T..T",
-      "TTTT",
-    ]),
-  },
-  {
-    id: 12,
-    width: 4,
-    height: 6,
-    gravity: "down",
-    timerSeconds: 96,
-    tileTypeCount: 6,
-    tutorialText: "Tiles now settle with gravity.",
-  },
-  {
-    id: 13,
-    width: 4,
-    height: 6,
-    gravity: "left",
-    timerSeconds: 94,
-    tileTypeCount: 6,
-  },
-  {
-    id: 14,
-    gravity: "up",
-    timerSeconds: 92,
-    tileTypeCount: 6,
-    ...patternToLevel([
-      "TTTT",
-      "T**T",
-      "TTTT",
-      "T..T",
-      "T##T",
-      "TTTT",
-    ]),
-  },
-  {
-    id: 15,
-    gravity: "down",
-    timerSeconds: 90,
-    tileTypeCount: 6,
-    ...patternToLevel([
-      "TTTT",
-      "T#*T",
-      "T..T",
-      "TTTT",
-      "T*#T",
-      "TTTT",
-    ]),
-  },
-
-  // 16-23: 5x7 advanced flow
-  {
-    id: 16,
-    gravity: "down",
-    timerSeconds: 94,
-    tileTypeCount: 6,
-    tutorialText: "Frozen tiles unlock when a neighbor pops.",
-    ...patternToLevel([
-      "TTTTT",
-      "TT*TT",
-      "TT.TT",
-      "TT*TT",
-      "TTTTT",
-      "TTTTT",
-      "TTTTT",
-    ]),
-  },
-  {
-    id: 17,
-    gravity: "none",
-    timerSeconds: 92,
-    tileTypeCount: 6,
-    ...patternToLevel([
-      "TTTTT",
-      "T###T",
-      "TT.TT",
-      "T***T",
-      "TTTTT",
-      "T...T",
-      "TTTTT",
-    ]),
-  },
-  {
-    id: 18,
-    gravity: "right",
-    timerSeconds: 90,
-    tileTypeCount: 6,
-    ...patternToLevel([
-      "TTTTT",
-      "TT#TT",
-      "TT.TT",
-      "TT#TT",
-      "TTTTT",
-      "T..TT",
-      "TTTTT",
-    ]),
-  },
-  {
-    id: 19,
-    gravity: "down",
-    timerSeconds: 88,
-    tileTypeCount: 6,
-    ...patternToLevel([
-      "TT.TT",
-      "T**#T",
-      "TT.TT",
-      "T#**T",
-      "TTTTT",
-      "TT#TT",
-      "TTTTT",
-    ]),
-  },
-  {
-    id: 20,
-    gravity: "left",
-    timerSeconds: 86,
-    tileTypeCount: 6,
-    ...patternToLevel([
-      "TTTTT",
-      "T#.#T",
-      "TTTTT",
-      "T***T",
-      "TT.TT",
-      "T#.#T",
-      "TTTTT",
-    ]),
-  },
-  {
-    id: 21,
-    gravity: "down",
-    timerSeconds: 84,
-    tileTypeCount: 7,
-    ...patternToLevel([
-      "TTTTT",
-      "TJ#JT",
-      "TT.TT",
-      "TTTTT",
-      "T#.#T",
-      "T...T",
-      "TTTTT",
-    ]),
-  },
-  {
-    id: 22,
-    gravity: "up",
-    timerSeconds: 82,
-    tileTypeCount: 7,
-    ...patternToLevel([
-      "TT.TT",
-      "TJJJT",
-      "TT.TT",
-      "T***T",
-      "TTTTT",
-      "T#.#T",
-      "TTTTT",
-    ]),
-  },
-  {
-    id: 23,
-    gravity: "right",
-    timerSeconds: 80,
-    tileTypeCount: 7,
-    ...patternToLevel([
-      "TT.TT",
-      "TJ#JT",
-      "TT.TT",
-      "T***T",
-      "TT#TT",
-      "TJ.JT",
-      "TTTTT",
-    ]),
-  },
-
-  // 24-30: 6x8 endgame
-  {
-    id: 24,
-    width: 6,
-    height: 8,
-    gravity: "none",
-    timerSeconds: 82,
-    tileTypeCount: 7,
-  },
-  {
-    id: 25,
-    gravity: "none",
-    timerSeconds: 80,
-    tileTypeCount: 7,
-    ...patternToLevel([
-      "TTTTTT",
-      "T####T",
-      "TT##TT",
-      "TTTTTT",
-      "TTTTTT",
-      "TT##TT",
-      "T####T",
-      "TTTTTT",
-    ]),
-  },
-  {
-    id: 26,
-    gravity: "down",
-    timerSeconds: 78,
-    tileTypeCount: 8,
-    ...patternToLevel([
-      "TTTTTT",
-      "TT**TT",
-      "TT##TT",
-      "TT..TT",
-      "TTTTTT",
-      "TT##TT",
-      "TT**TT",
-      "TTTTTT",
-    ]),
-  },
-  {
-    id: 27,
-    gravity: "left",
-    timerSeconds: 76,
-    tileTypeCount: 8,
-    ...patternToLevel([
-      "TTTTTT",
-      "T##JTT",
-      "TT**TT",
-      "TT..TT",
-      "TTTTTT",
-      "TT..TT",
-      "TT**TT",
-      "TTJ##T",
-    ]),
-  },
-  {
-    id: 28,
-    gravity: "up",
-    timerSeconds: 74,
-    tileTypeCount: 8,
-    ...patternToLevel([
-      "TTTTTT",
-      "T#J#TT",
-      "TT**TT",
-      "TJ..JT",
-      "TT##TT",
-      "TJ..JT",
-      "TT**TT",
-      "TT#J#T",
-    ]),
-  },
-  {
-    id: 29,
-    gravity: "right",
-    timerSeconds: 72,
-    tileTypeCount: 8,
-    ...patternToLevel([
-      "TTTTTT",
-      "T###TT",
-      "TT**TT",
-      "TTJ#TT",
-      "TTTTTT",
-      "TT#JTT",
-      "TT**TT",
-      "TT###T",
-    ]),
-  },
-  {
-    id: 30,
-    gravity: "down",
-    timerSeconds: 74,
-    tileTypeCount: 8,
-    ...patternToLevel([
-      "TTTTTT",
-      "T#TT#T",
-      "TT*JTT",
-      "TT..TT",
-      "TT##TT",
-      "TT..TT",
-      "TTJ*TT",
-      "T#TT#T",
-    ]),
-  },
-];
-
-if (LEVELS.length !== 30) {
-  throw new Error(`Expected 30 levels, got ${LEVELS.length}.`);
+function shuffleWithRng<T>(items: T[], rng: () => number): void {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
 }
+
+function resolveBoardSize(levelId: number): { width: number; height: number } {
+  const band = SIZE_BANDS.find((item) => levelId >= item.start && levelId <= item.end);
+  if (!band) {
+    return { width: 6, height: 8 };
+  }
+
+  return {
+    width: band.width,
+    height: band.height,
+  };
+}
+
+function resolvePhase(levelId: number): DifficultyPhase {
+  if (levelId <= 15) {
+    return "classic";
+  }
+  if (levelId <= 30) {
+    return "gravity";
+  }
+  if (levelId <= 42) {
+    return "frozen";
+  }
+  if (levelId <= 48) {
+    return "monkey";
+  }
+  if (levelId <= 70) {
+    return "mixed";
+  }
+  if (levelId <= 80) {
+    return "hard";
+  }
+  return "nightmare";
+}
+
+function resolveGravity(levelId: number, phase: DifficultyPhase): GravityDirection {
+  if (phase === "gravity" || phase === "mixed" || phase === "hard" || phase === "nightmare") {
+    return GRAVITY_CYCLE[(levelId - 1) % GRAVITY_CYCLE.length];
+  }
+
+  return "none";
+}
+
+function resolveTileTypeCount(levelId: number, phase: DifficultyPhase): number {
+  switch (phase) {
+    case "classic":
+      return clampInt(3 + (levelId - 1) / 5, 3, 8);
+    case "gravity":
+      return clampInt(4 + (levelId - 16) / 6, 4, 8);
+    case "frozen":
+      return clampInt(5 + (levelId - 31) / 6, 5, 8);
+    case "monkey":
+      return clampInt(6 + (levelId - 43) / 4, 6, 8);
+    case "mixed":
+      return clampInt(6 + (levelId - 49) / 8, 6, 8);
+    case "hard":
+      return clampInt(7 + (levelId - 71) / 5, 7, 8);
+    case "nightmare":
+      return 8;
+    default:
+      return 6;
+  }
+}
+
+function resolveTimerSeconds(levelId: number, phase: DifficultyPhase): number {
+  let timer: number;
+
+  switch (phase) {
+    case "classic":
+      timer = 132 - (levelId - 1) * 2;
+      break;
+    case "gravity":
+      timer = 110 - (levelId - 16);
+      break;
+    case "frozen":
+      timer = 102 - (levelId - 31);
+      break;
+    case "monkey":
+      timer = 96 - (levelId - 43);
+      break;
+    case "mixed":
+      timer = 94 - Math.floor((levelId - 49) * 0.9);
+      break;
+    case "hard":
+      timer = 80 - (levelId - 71);
+      break;
+    case "nightmare":
+      timer = 72 - Math.floor((levelId - 81) * 0.7);
+      break;
+    default:
+      timer = 96;
+      break;
+  }
+
+  return clampInt(timer, 62, 140);
+}
+
+function convertFirst(layout: number[][], from: number, to: number): boolean {
+  for (let row = 0; row < layout.length; row++) {
+    for (let col = 0; col < layout[row].length; col++) {
+      if (layout[row][col] === from) {
+        layout[row][col] = to;
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function countCells(layout: number[][], predicate: (value: number) => boolean): number {
+  let count = 0;
+  for (let row = 0; row < layout.length; row++) {
+    for (let col = 0; col < layout[row].length; col++) {
+      if (predicate(layout[row][col])) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+function buildLayout(width: number, height: number, options: LayoutOptions): number[][] {
+  const totalCells = width * height;
+  const layout = Array.from({ length: height }, () => Array.from({ length: width }, () => 1));
+
+  let emptyCount = clampInt(options.emptyCount ?? 0, 0, totalCells);
+  let solidCount = clampInt(options.solidCount ?? 0, 0, totalCells - emptyCount);
+  let jumperCount = clampInt(options.jumperCount ?? 0, 0, totalCells - emptyCount - solidCount);
+
+  const reserved = emptyCount + solidCount + jumperCount;
+  const minimumRegularTiles = Math.max(10, Math.floor(totalCells * 0.35));
+  const maxFrozenByRegular = Math.max(0, totalCells - reserved - minimumRegularTiles);
+  let frozenCount = clampInt(options.frozenCount ?? 0, 0, maxFrozenByRegular);
+
+  const coords: Coord[] = [];
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      coords.push({ row, col });
+    }
+  }
+
+  const rng = createSeededRng(options.seed);
+  shuffleWithRng(coords, rng);
+
+  const place = (targetCount: number, value: number): void => {
+    let placed = 0;
+    for (let i = 0; i < coords.length && placed < targetCount; i++) {
+      const { row, col } = coords[i];
+      if (layout[row][col] !== 1) {
+        continue;
+      }
+      layout[row][col] = value;
+      placed++;
+    }
+  };
+
+  place(solidCount, -1);
+  place(jumperCount, -3);
+  place(emptyCount, 0);
+  place(frozenCount, -2);
+
+  let pairAssignable = countCells(layout, (value) => value === 1 || value === -2);
+  if (pairAssignable % 2 !== 0) {
+    const changed = convertFirst(layout, 1, 0) || convertFirst(layout, -2, 0);
+    if (changed) {
+      pairAssignable -= 1;
+    }
+  }
+
+  const minimumVisibleTiles = Math.max(8, Math.floor(totalCells * 0.3));
+  while (countCells(layout, (value) => value === 1) < minimumVisibleTiles) {
+    if (!convertFirst(layout, -2, 1)) {
+      break;
+    }
+  }
+
+  if (pairAssignable < 2) {
+    convertFirst(layout, 0, 1);
+    convertFirst(layout, 0, 1);
+  }
+
+  return layout;
+}
+
+function buildLevel(levelId: number): LevelDef {
+  const phase = resolvePhase(levelId);
+  const { width, height } = resolveBoardSize(levelId);
+
+  const level: LevelDef = {
+    id: levelId,
+    width,
+    height,
+    gravity: resolveGravity(levelId, phase),
+    timerSeconds: resolveTimerSeconds(levelId, phase),
+    tileTypeCount: resolveTileTypeCount(levelId, phase),
+  };
+
+  if (phase === "classic") {
+    if (width * height % 2 !== 0) {
+      level.layout = buildLayout(width, height, {
+        seed: levelId * 101 + 7,
+        emptyCount: 1,
+      });
+    }
+    if (levelId === 1) {
+      level.tutorialText = "Tap two matching tiles to connect them!";
+    }
+    return level;
+  }
+
+  if (phase === "gravity") {
+    if (levelId === 16) {
+      level.tutorialText = "Gravity is active. Cleared tiles pull the board.";
+    }
+    return level;
+  }
+
+  if (phase === "frozen") {
+    const progress = levelId - 31;
+    const frozenCount = width === 4 ? 4 + Math.floor(progress * 0.6) : 7 + Math.floor(progress * 0.8);
+    level.layout = buildLayout(width, height, {
+      seed: levelId * 113 + 17,
+      frozenCount,
+      emptyCount: progress % 3 === 0 ? 1 : 0,
+    });
+    if (levelId === 31) {
+      level.tutorialText = "Frozen tiles unlock when nearby matches pop.";
+    }
+    return level;
+  }
+
+  if (phase === "monkey") {
+    const progress = levelId - 43;
+    level.jumpingBlockerCount = clampInt(1 + progress / 2, 1, 3);
+    if (levelId === 43) {
+      level.tutorialText = "Monkeys jump after every match and block your routes.";
+    }
+    return level;
+  }
+
+  if (phase === "mixed") {
+    const progress = levelId - 49;
+    level.layout = buildLayout(width, height, {
+      seed: levelId * 127 + 23,
+      frozenCount: 7 + Math.floor(progress * 0.5),
+      jumperCount: 1 + Math.floor(progress / 9),
+      solidCount: progress >= 8 ? 1 + Math.floor((progress - 8) / 7) : 0,
+      emptyCount: 1 + (progress % 2),
+    });
+    if (levelId === 49) {
+      level.tutorialText = "Now combine gravity, frozen tiles and monkeys.";
+    }
+    return level;
+  }
+
+  if (phase === "hard") {
+    const progress = levelId - 71;
+    level.layout = buildLayout(width, height, {
+      seed: levelId * 131 + 29,
+      frozenCount: 14 + progress,
+      jumperCount: 2 + Math.floor(progress / 3),
+      solidCount: 2 + Math.floor(progress / 4),
+      emptyCount: 2 + (progress % 2),
+    });
+    return level;
+  }
+
+  const progress = levelId - 81;
+  level.layout = buildLayout(width, height, {
+    seed: levelId * 137 + 31,
+    frozenCount: 18 + progress * 2,
+    jumperCount: 3 + Math.floor(progress / 2),
+    solidCount: 4 + Math.floor(progress / 3),
+    emptyCount: 3 + (progress % 3 === 0 ? 1 : 0),
+  });
+  if (levelId === 81) {
+    level.tutorialText = "Final stretch: every challenge is active now.";
+  }
+
+  return level;
+}
+
+export const LEVELS: LevelDef[] = Array.from({ length: TOTAL_LEVELS }, (_, index) =>
+  buildLevel(index + 1)
+);
+
+if (LEVELS.length !== TOTAL_LEVELS) {
+  throw new Error(`Expected ${TOTAL_LEVELS} levels, got ${LEVELS.length}.`);
+}
+

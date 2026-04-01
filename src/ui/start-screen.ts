@@ -64,7 +64,7 @@ export class StartScreen {
   private levelState: LevelSelectState = {
     unlockedThroughLevel: 1,
     currentLevel: 1,
-    totalLevels: 30,
+    totalLevels: 90,
   };
 
   private readonly onStart: OnStart;
