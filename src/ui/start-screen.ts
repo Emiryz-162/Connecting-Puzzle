@@ -19,6 +19,8 @@ export interface AlbumEntry {
 }
 
 export class StartScreen {
+  private static readonly ALBUM_FALLBACK_TOTAL = 30;
+
   private readonly root: HTMLDivElement;
   private readonly content: HTMLDivElement;
   private readonly title: HTMLHeadingElement;
@@ -37,6 +39,7 @@ export class StartScreen {
   private readonly albumOverlay: HTMLDivElement;
   private readonly albumPanel: HTMLDivElement;
   private readonly albumCloseButton: HTMLButtonElement;
+  private readonly albumProgressCounter: HTMLDivElement;
   private readonly albumGrid: HTMLDivElement;
   private readonly albumViewerOverlay: HTMLDivElement;
   private readonly albumViewerDialog: HTMLDivElement;
@@ -221,10 +224,16 @@ export class StartScreen {
     const albumTitle = document.createElement("h2");
     albumTitle.className = "sections-title";
     albumTitle.textContent = "ALBUM";
+    const albumTitleRow = document.createElement("div");
+    albumTitleRow.className = "album-title-row";
+    this.albumProgressCounter = document.createElement("div");
+    this.albumProgressCounter.className = "album-progress-counter";
+    this.albumProgressCounter.textContent = `0/${StartScreen.ALBUM_FALLBACK_TOTAL}`;
     const albumSubtitle = document.createElement("p");
     albumSubtitle.className = "sections-subtitle";
     albumSubtitle.textContent = "Unlock photos by earning XP";
-    albumHeadingWrap.append(albumTitle, albumSubtitle);
+    albumTitleRow.append(albumTitle, this.albumProgressCounter);
+    albumHeadingWrap.append(albumTitleRow, albumSubtitle);
 
     this.albumCloseButton = document.createElement("button");
     this.albumCloseButton.className = "sections-close-btn";
@@ -507,6 +516,18 @@ export class StartScreen {
   }
 
   private renderAlbum(): void {
+    const totalPhotos =
+      this.albumEntries.length > 0 ? this.albumEntries.length : StartScreen.ALBUM_FALLBACK_TOTAL;
+    const unlockedPhotos = this.albumEntries.reduce(
+      (count, entry) => count + (entry.unlocked ? 1 : 0),
+      0
+    );
+    this.albumProgressCounter.textContent = `${unlockedPhotos}/${totalPhotos}`;
+    this.albumProgressCounter.setAttribute(
+      "aria-label",
+      `Unlocked photos ${unlockedPhotos} of ${totalPhotos}`
+    );
+
     this.albumGrid.replaceChildren();
     if (this.albumEntries.length === 0) {
       const emptyState = document.createElement("div");
