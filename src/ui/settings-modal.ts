@@ -1,4 +1,4 @@
-import { Settings } from "../types";
+﻿import { Settings } from "../types";
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
 
 type SettingsKey = keyof Settings;
@@ -358,7 +358,7 @@ export class SettingsModal {
     });
 
     const check = this.toggleChecks[def.key];
-    check.textContent = "✓";
+    check.textContent = "\u2713";
     applyStyles(check, {
       fontSize: metrics.isMobile ? "14px" : "13px",
       fontWeight: "800",
@@ -525,3 +525,4 @@ export class SettingsModal {
     this.button.style.transform = "scale(1)";
   };
 }
+
