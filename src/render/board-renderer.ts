@@ -133,7 +133,8 @@ export function drawBoard(
   frozenOverlayImage?: CanvasImageSource | null,
   mergePullItems?: MergePullRenderItem[],
   gravitySlideItems?: GravitySlideRenderItem[],
-  hiddenTileCoords?: Coord[]
+  hiddenTileCoords?: Coord[],
+  gravityEdgePulse = 0
 ): void {
   const { offsetX, offsetY, cellSize } = layout;
   const hiddenCoordKeys =
@@ -191,6 +192,8 @@ export function drawBoard(
     }
   }
 
+  drawGravityEdgeArrows(ctx, board, layout, gravityEdgePulse);
+
   if (selectedTile) {
     const x = offsetX + selectedTile.col * cellSize + CELL_GAP / 2;
     const y = offsetY + selectedTile.row * cellSize + CELL_GAP / 2;
@@ -225,6 +228,109 @@ export function drawBoard(
       frozenOverlayImage ?? null
     );
   }
+}
+
+function drawGravityEdgeArrows(
+  ctx: CanvasRenderingContext2D,
+  board: BoardState,
+  layout: BoardLayout,
+  pulse: number
+): void {
+  if (board.gravity === "none") {
+    return;
+  }
+
+  const p = clamp01(pulse);
+  const baseAlpha = 0.42 + p * 0.4;
+  const glowAlpha = 0.18 + p * 0.2;
+  const arrowSize = Math.max(7, layout.cellSize * (0.17 + p * 0.05));
+  const x0 = layout.offsetX;
+  const y0 = layout.offsetY;
+  const w = board.width * layout.cellSize;
+  const h = board.height * layout.cellSize;
+  const sideOffset = Math.max(6, layout.cellSize * 0.16);
+  const spanCount =
+    board.gravity === "left" || board.gravity === "right"
+      ? Math.max(4, Math.min(7, Math.floor(board.height * 0.9)))
+      : Math.max(4, Math.min(7, Math.floor(board.width * 0.9)));
+
+  const drawArrows = (): void => {
+    for (let i = 0; i < spanCount; i++) {
+      const t = spanCount === 1 ? 0.5 : (i + 0.5) / spanCount;
+      let cx = x0;
+      let cy = y0;
+
+      if (board.gravity === "left") {
+        cx = x0 - sideOffset;
+        cy = y0 + t * h;
+        drawDirectionalArrow(ctx, cx, cy, arrowSize, "left");
+      } else if (board.gravity === "right") {
+        cx = x0 + w + sideOffset;
+        cy = y0 + t * h;
+        drawDirectionalArrow(ctx, cx, cy, arrowSize, "right");
+      } else if (board.gravity === "up") {
+        cx = x0 + t * w;
+        cy = y0 - sideOffset;
+        drawDirectionalArrow(ctx, cx, cy, arrowSize, "up");
+      } else if (board.gravity === "down") {
+        cx = x0 + t * w;
+        cy = y0 + h + sideOffset;
+        drawDirectionalArrow(ctx, cx, cy, arrowSize, "down");
+      }
+    }
+  };
+
+  ctx.save();
+  ctx.strokeStyle = `rgba(255, 255, 255, ${glowAlpha})`;
+  ctx.lineWidth = Math.max(2.2, layout.cellSize * 0.06);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  drawArrows();
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = `rgba(235, 134, 134, ${baseAlpha})`;
+  ctx.lineWidth = Math.max(1.65, layout.cellSize * 0.045);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  drawArrows();
+  ctx.restore();
+}
+
+function drawDirectionalArrow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  direction: "left" | "right" | "up" | "down"
+): void {
+  let angle = 0;
+  if (direction === "left") angle = Math.PI;
+  if (direction === "up") angle = -Math.PI / 2;
+  if (direction === "down") angle = Math.PI / 2;
+
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const rotate = (px: number, py: number): { x: number; y: number } => ({
+    x: x + px * c - py * s,
+    y: y + px * s + py * c,
+  });
+
+  const stemBack = rotate(-size * 1.15, 0);
+  const tip = rotate(size * 1.05, 0);
+  const wingUp = rotate(size * 0.2, -size * 0.56);
+  const wingDown = rotate(size * 0.2, size * 0.56);
+
+  ctx.beginPath();
+  ctx.moveTo(stemBack.x, stemBack.y);
+  ctx.lineTo(tip.x, tip.y);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(wingUp.x, wingUp.y);
+  ctx.lineTo(tip.x, tip.y);
+  ctx.lineTo(wingDown.x, wingDown.y);
+  ctx.stroke();
 }
 
 export function drawFallingTiles(

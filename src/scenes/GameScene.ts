@@ -66,6 +66,12 @@ import {
 const START_LEVEL_ID_FOR_TESTING = 1;
 const START_LEVEL_ID = Math.max(1, Math.min(30, START_LEVEL_ID_FOR_TESTING));
 const MATCH_SCORE_PER_PAIR = 100;
+const RANDOM_GRAVITY_DIRECTIONS: Exclude<BoardState["gravity"], "none">[] = [
+  "up",
+  "down",
+  "left",
+  "right",
+];
 
 const TUTORIAL_SCRIPT: TutorialScriptStep[] = [
   {
@@ -278,6 +284,9 @@ export class GameScene extends Phaser.Scene {
   private static readonly JUMPER_JUMP_PER_CELL_MS = 44;
   private static readonly JUMPER_JUMP_MAX_DURATION_MS = 520;
   private static readonly MAX_JUMPER_JUMP_ANIMATIONS = 24;
+  private static readonly RANDOM_GRAVITY_MIN_MATCHES = 3;
+  private static readonly RANDOM_GRAVITY_MAX_MATCHES = 4;
+  private static readonly GRAVITY_EDGE_PULSE_DURATION_MS = 300;
   private static readonly MATCH_CLEAR_APPROACH_DURATION_MS = 220;
   private static readonly MATCH_CLEAR_SCATTER_DURATION_MS = 430;
   private static readonly MATCH_CLEAR_SCATTER_GRAVITY_PX_S2 = 2750;
@@ -347,6 +356,9 @@ export class GameScene extends Phaser.Scene {
   private gravitySlideAnimations: GravitySlideAnimation[] = [];
   private jumperJumpAnimations: JumperJumpAnimation[] = [];
   private matchClearAnimation: MatchClearAnimation | null = null;
+  private randomGravityEnabled = false;
+  private randomGravityMatchesUntilShift = 0;
+  private gravityEdgePulseTimerMs = 0;
 
   constructor() {
     super(GameScene.SCENE_KEY);
@@ -504,6 +516,9 @@ export class GameScene extends Phaser.Scene {
     this.gravitySlideAnimations = [];
     this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
+    this.randomGravityEnabled = false;
+    this.randomGravityMatchesUntilShift = 0;
+    this.gravityEdgePulseTimerMs = 0;
     this.monkeyImage = null;
     this.iceOverlayImage = null;
     this.foodsBackgroundImage = null;
@@ -559,6 +574,13 @@ export class GameScene extends Phaser.Scene {
     this.gravitySlideAnimations = [];
     this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
+    this.randomGravityEnabled = this.shouldUseRandomGravity(def);
+    this.randomGravityMatchesUntilShift = this.randomGravityEnabled
+      ? this.rollRandomGravityMatchWindow()
+      : 0;
+    this.gravityEdgePulseTimerMs = this.randomGravityEnabled
+      ? GameScene.GRAVITY_EDGE_PULSE_DURATION_MS * 0.6
+      : 0;
 
     this.recalculateLayout();
     this.syncStartScreenLevelSelectionState();
@@ -735,6 +757,9 @@ export class GameScene extends Phaser.Scene {
       this.jumperJumpAnimations = this.jumperJumpAnimations
         .map((anim) => ({ ...anim, elapsedMs: anim.elapsedMs + deltaMs }))
         .filter((anim) => anim.elapsedMs < anim.durationMs);
+    }
+    if (this.gravityEdgePulseTimerMs > 0) {
+      this.gravityEdgePulseTimerMs = Math.max(0, this.gravityEdgePulseTimerMs - deltaMs);
     }
 
     if (this.previousPhase !== this.gameState.phase) {
@@ -1336,6 +1361,10 @@ export class GameScene extends Phaser.Scene {
       this.triggerHaptic("medium");
     }
 
+    if (this.gameState.phase === "playing" && !this.noMovesWarning) {
+      this.advanceRandomGravityAfterMatch();
+    }
+
     if (this.tutorialEnabled && tutorialMatchBoard) {
       this.handleTutorialMatchResolved(tutorialMatchBoard);
     }
@@ -1435,6 +1464,53 @@ export class GameScene extends Phaser.Scene {
       kind: anim.kind,
       progress: Math.max(0, Math.min(1, anim.elapsedMs / anim.durationMs)),
     }));
+  }
+
+  private shouldUseRandomGravity(def: LevelDef): boolean {
+    return def.gravity !== "none";
+  }
+
+  private rollRandomGravityMatchWindow(): number {
+    const span =
+      GameScene.RANDOM_GRAVITY_MAX_MATCHES - GameScene.RANDOM_GRAVITY_MIN_MATCHES + 1;
+    return GameScene.RANDOM_GRAVITY_MIN_MATCHES + Math.floor(Math.random() * span);
+  }
+
+  private pickNextRandomGravityDirection(
+    current: BoardState["gravity"]
+  ): Exclude<BoardState["gravity"], "none"> {
+    const candidates = RANDOM_GRAVITY_DIRECTIONS.filter((direction) => direction !== current);
+    if (candidates.length === 0) {
+      return "down";
+    }
+    const idx = Math.floor(Math.random() * candidates.length);
+    return candidates[idx];
+  }
+
+  private advanceRandomGravityAfterMatch(): void {
+    if (!this.randomGravityEnabled || this.tutorialEnabled) {
+      return;
+    }
+
+    this.randomGravityMatchesUntilShift = Math.max(0, this.randomGravityMatchesUntilShift - 1);
+    if (this.randomGravityMatchesUntilShift > 0) {
+      return;
+    }
+
+    const current = this.gameState.board.gravity;
+    const next = this.pickNextRandomGravityDirection(current);
+    if (next !== current) {
+      this.gameState.board.gravity = next;
+      this.gravityEdgePulseTimerMs = GameScene.GRAVITY_EDGE_PULSE_DURATION_MS;
+    }
+    this.randomGravityMatchesUntilShift = this.rollRandomGravityMatchWindow();
+  }
+
+  private getGravityEdgePulseProgress(): number {
+    if (this.gravityEdgePulseTimerMs <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(1, this.gravityEdgePulseTimerMs / GameScene.GRAVITY_EDGE_PULSE_DURATION_MS));
   }
 
   private startJumperJumpAnimations(moves: JumpMove[]): void {
@@ -1558,6 +1634,7 @@ export class GameScene extends Phaser.Scene {
       hiddenCoordMap.set(`${coord.row},${coord.col}`, coord);
     }
     const hiddenCoords = Array.from(hiddenCoordMap.values());
+    const gravityEdgePulse = this.getGravityEdgePulseProgress();
 
     drawBoard(
       ctx,
@@ -1571,7 +1648,8 @@ export class GameScene extends Phaser.Scene {
       this.iceOverlayImage,
       this.getMergePullRenderItems(),
       this.getGravitySlideRenderItems(),
-      hiddenCoords
+      hiddenCoords,
+      gravityEdgePulse
     );
     drawJumperFlights(
       ctx,
@@ -1873,6 +1951,9 @@ export class GameScene extends Phaser.Scene {
     this.pendingRemovalUsedClearFall = false;
     this.noMovesWarning = false;
     this.jumperJumpAnimations = [];
+    this.randomGravityEnabled = false;
+    this.randomGravityMatchesUntilShift = 0;
+    this.gravityEdgePulseTimerMs = 0;
     this.activePath = null;
     this.pathDisplayTimer = 0;
     this.hintPath = null;
@@ -2443,6 +2524,9 @@ export class GameScene extends Phaser.Scene {
     this.pendingRemovalUsedClearFall = false;
     this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
+    this.randomGravityEnabled = false;
+    this.randomGravityMatchesUntilShift = 0;
+    this.gravityEdgePulseTimerMs = 0;
     this.pauseForStartScreen();
     this.triggerHaptic("light");
   }
@@ -2465,6 +2549,9 @@ export class GameScene extends Phaser.Scene {
     this.pendingRemovalUsedClearFall = false;
     this.jumperJumpAnimations = [];
     this.matchClearAnimation = null;
+    this.randomGravityEnabled = false;
+    this.randomGravityMatchesUntilShift = 0;
+    this.gravityEdgePulseTimerMs = 0;
     this.noMovesWarning = false;
     this.restartLevel();
     this.setSceneInputEnabled(!this.settingsOpen && !this.startScreen.isVisible());
