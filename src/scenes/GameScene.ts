@@ -37,7 +37,7 @@ import { SettingsModal } from "../ui/settings-modal";
 import { HintButton } from "../ui/hint-button";
 import { HomeButton } from "../ui/home-button";
 import { ReplayButton } from "../ui/replay-button";
-import { StartScreen } from "../ui/start-screen";
+import { AlbumEntry, StartScreen } from "../ui/start-screen";
 import { HudOverlay } from "../ui/hud-overlay";
 import { ResultOverlay } from "../ui/result-overlay";
 import { HintFeedbackOverlay } from "../ui/hint-feedback-overlay";
@@ -61,6 +61,14 @@ import {
   PATH_DISPLAY_DURATION,
   OVERLAY_BG,
 } from "../constants";
+import {
+  AlbumProgressStore,
+  XP_PER_LEVEL_CLEAR,
+  XP_PER_PHOTO_UNLOCK,
+  PHOTO_ALBUM_SIZE,
+  getAllPhotoIdsSorted,
+  getPhotoAssetPath,
+} from "../album/photo-album";
 
 // Test helper: change this to start directly from a specific level id (1..30).
 const START_LEVEL_ID_FOR_TESTING = 1;
@@ -270,7 +278,8 @@ export class GameScene extends Phaser.Scene {
   private static readonly MAX_RESHUFFLE_ATTEMPTS = 24;
   private static readonly HINT_DISPLAY_DURATION_MS = 1400;
   private static readonly HINT_FEEDBACK_DURATION_S = 1.2;
-  private static readonly XP_PROGRESS_STEP = 150;
+  private static readonly XP_PROGRESS_STEP = XP_PER_PHOTO_UNLOCK;
+  private static readonly LEVEL_WIN_XP_GAIN = XP_PER_LEVEL_CLEAR;
   private static readonly OVERLAY_INTRO_DURATION_S = 0.24;
   private static readonly MATCH_CHAIN_WINDOW_MS = 1300;
   private static readonly TIME_LOW_WARNING_SECONDS = 10;
@@ -311,6 +320,7 @@ export class GameScene extends Phaser.Scene {
 
   private progression = new LevelProgression(LEVELS, START_LEVEL_ID);
   private levelProgressStore!: LevelProgressStore;
+  private albumProgressStore!: AlbumProgressStore;
   private campaignCompleted = false;
   private runScore = 0;
   private runScoreSubmitted = false;
@@ -347,6 +357,7 @@ export class GameScene extends Phaser.Scene {
   private noMovesWarning = false;
   private runXp = 0;
   private lastWinXpGain = 0;
+  private lastUnlockedPhotoId: number | null = null;
   private previousPhase: GameState["phase"] | null = null;
   private overlayIntroTimer = 0;
   private timeLowWarningPlayed = false;
@@ -372,6 +383,8 @@ export class GameScene extends Phaser.Scene {
       this.progression.getTotalLevels(),
       START_LEVEL_ID
     );
+    this.albumProgressStore = new AlbumProgressStore(PHOTO_ALBUM_SIZE);
+    this.runXp = this.albumProgressStore.getTotalXp();
     const resumeLevel = this.getResumeLevelId();
     this.progression.setCurrentLevelById(resumeLevel);
     this.audio = new AudioManager(this.settings.fxEnabled, this.settings.musicEnabled);
@@ -421,6 +434,7 @@ export class GameScene extends Phaser.Scene {
     this.resultOverlay = new ResultOverlay();
     this.hintFeedbackOverlay = new HintFeedbackOverlay();
     this.tutorialOverlay = new TutorialOverlay();
+    this.syncStartScreenAlbumState();
     this.hydrateThemeTileImages();
 
     this.handleResize();
@@ -541,9 +555,9 @@ export class GameScene extends Phaser.Scene {
     if (!preserveRunScore) {
       this.runScore = 0;
       this.runScoreSubmitted = false;
-      this.runXp = 0;
     }
     this.lastWinXpGain = 0;
+    this.lastUnlockedPhotoId = null;
     this.hintPath = null;
     this.hintPathTimerMs = 0;
     this.hintFeedbackText = null;
@@ -1594,10 +1608,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private applyLevelWinProgress(): void {
-    const levelId = this.gameState.levelId;
-    const xpGain = 20 + Math.min(30, Math.floor(levelId * 1.5));
-    this.runXp += xpGain;
-    this.lastWinXpGain = xpGain;
+    const award = this.albumProgressStore.awardXp(GameScene.LEVEL_WIN_XP_GAIN);
+    this.runXp = award.totalXp;
+    this.lastWinXpGain = GameScene.LEVEL_WIN_XP_GAIN;
+    this.lastUnlockedPhotoId = award.lastUnlockedPhotoId;
+    this.syncStartScreenAlbumState();
     this.audio.play(GAME_SOUNDS.XP_GAIN);
   }
 
@@ -2280,6 +2295,7 @@ export class GameScene extends Phaser.Scene {
         lastWinXpGain: 0,
         xpInStep: 0,
         xpStep: GameScene.XP_PROGRESS_STEP,
+        unlockedPhotoId: null,
       });
       return;
     }
@@ -2294,6 +2310,7 @@ export class GameScene extends Phaser.Scene {
         lastWinXpGain: 0,
         xpInStep: 0,
         xpStep: GameScene.XP_PROGRESS_STEP,
+        unlockedPhotoId: null,
       });
       return;
     }
@@ -2307,6 +2324,7 @@ export class GameScene extends Phaser.Scene {
       lastWinXpGain: this.lastWinXpGain,
       xpInStep: this.getXpProgressInStep(),
       xpStep: GameScene.XP_PROGRESS_STEP,
+      unlockedPhotoId: this.gameState.phase === "won" ? this.lastUnlockedPhotoId : null,
     });
   }
 
@@ -2437,6 +2455,7 @@ export class GameScene extends Phaser.Scene {
       message: "",
     });
     this.syncStartScreenLevelSelectionState();
+    this.syncStartScreenAlbumState();
     this.scene.launch('AmbientMenuScene', { theme: this.activeTheme });
     this.startScreen.show();
     this.setSceneInputEnabled(false);
@@ -2586,6 +2605,20 @@ export class GameScene extends Phaser.Scene {
       Math.min(highestUnlocked, this.levelProgressStore.getLastPlayedLevel())
     );
     return lastPlayed;
+  }
+
+  private syncStartScreenAlbumState(): void {
+    if (!this.startScreen || !this.albumProgressStore) {
+      return;
+    }
+
+    const unlockedIds = new Set(this.albumProgressStore.getUnlockedPhotoIdsByUnlockOrder());
+    const entries: AlbumEntry[] = getAllPhotoIdsSorted(PHOTO_ALBUM_SIZE).map((photoId) => ({
+      photoId,
+      src: getPhotoAssetPath(photoId),
+      unlocked: unlockedIds.has(photoId),
+    }));
+    this.startScreen.setAlbumEntries(entries);
   }
 
   private syncStartScreenLevelSelectionState(): void {

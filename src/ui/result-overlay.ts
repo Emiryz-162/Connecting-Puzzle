@@ -1,4 +1,5 @@
 import { getUiMetrics } from "./ui-metrics";
+import { getPhotoAssetPath } from "../album/photo-album";
 
 type ResultPhase = "won" | "lost" | "hidden";
 
@@ -11,6 +12,7 @@ interface ResultSnapshot {
   lastWinXpGain: number;
   xpInStep: number;
   xpStep: number;
+  unlockedPhotoId: number | null;
 }
 
 function applyStyles(element: HTMLElement, style: Partial<CSSStyleDeclaration>): void {
@@ -33,6 +35,10 @@ export class ResultOverlay {
   private readonly xpTrack: HTMLDivElement;
   private readonly xpFill: HTMLDivElement;
   private readonly xpDetail: HTMLDivElement;
+  private readonly unlockedPhotoWrap: HTMLDivElement;
+  private readonly unlockedPhotoLabel: HTMLDivElement;
+  private readonly unlockedPhotoFrame: HTMLDivElement;
+  private readonly unlockedPhotoImage: HTMLImageElement;
   private readonly actionText: HTMLDivElement;
   private visible = false;
   private readonly onWindowResize = (): void => this.applyResponsiveStyles();
@@ -132,6 +138,48 @@ export class ResultOverlay {
       fontVariantNumeric: "tabular-nums",
     });
 
+    this.unlockedPhotoWrap = document.createElement("div");
+    applyStyles(this.unlockedPhotoWrap, {
+      display: "none",
+      marginBottom: "12px",
+    });
+
+    this.unlockedPhotoLabel = document.createElement("div");
+    applyStyles(this.unlockedPhotoLabel, {
+      color: "#b2615e",
+      fontWeight: "800",
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+      marginBottom: "8px",
+    });
+
+    this.unlockedPhotoFrame = document.createElement("div");
+    applyStyles(this.unlockedPhotoFrame, {
+      position: "relative",
+      width: "100%",
+      borderRadius: "14px",
+      overflow: "hidden",
+      border: "1px solid rgba(235, 134, 134, 0.34)",
+      boxShadow: "0 10px 22px rgba(107, 79, 69, 0.22)",
+      background: "rgba(255,255,255,0.45)",
+      aspectRatio: "16 / 9",
+    });
+
+    this.unlockedPhotoImage = document.createElement("img");
+    this.unlockedPhotoImage.alt = "Unlocked album photo";
+    this.unlockedPhotoImage.decoding = "async";
+    this.unlockedPhotoImage.loading = "lazy";
+    applyStyles(this.unlockedPhotoImage, {
+      width: "100%",
+      height: "100%",
+      objectFit: "contain",
+      objectPosition: "center center",
+      display: "block",
+    });
+
+    this.unlockedPhotoFrame.append(this.unlockedPhotoImage);
+    this.unlockedPhotoWrap.append(this.unlockedPhotoLabel, this.unlockedPhotoFrame);
+
     this.actionText = document.createElement("div");
     applyStyles(this.actionText, {
       borderRadius: "14px",
@@ -150,6 +198,7 @@ export class ResultOverlay {
       this.xpGainText,
       this.xpTrack,
       this.xpDetail,
+      this.unlockedPhotoWrap,
       this.actionText
     );
 
@@ -185,6 +234,14 @@ export class ResultOverlay {
       this.xpGainText.textContent = `+${snapshot.lastWinXpGain} XP`;
       this.xpFill.style.width = `${clamp01(snapshot.xpInStep / snapshot.xpStep) * 100}%`;
       this.xpDetail.textContent = `XP ${snapshot.xpInStep}/${snapshot.xpStep}`;
+      if (snapshot.unlockedPhotoId !== null) {
+        this.unlockedPhotoWrap.style.display = "block";
+        this.unlockedPhotoImage.src = getPhotoAssetPath(snapshot.unlockedPhotoId);
+        this.unlockedPhotoLabel.textContent = "New Photo Unlocked";
+      } else {
+        this.unlockedPhotoWrap.style.display = "none";
+        this.unlockedPhotoImage.removeAttribute("src");
+      }
       this.actionText.textContent = action;
       return;
     }
@@ -196,6 +253,8 @@ export class ResultOverlay {
     this.xpGainText.style.display = "none";
     this.xpTrack.style.display = "none";
     this.xpDetail.style.display = "none";
+    this.unlockedPhotoWrap.style.display = "none";
+    this.unlockedPhotoImage.removeAttribute("src");
     this.actionText.textContent = "Tap to retry";
   }
 
@@ -218,6 +277,8 @@ export class ResultOverlay {
     this.xpGainText.style.fontSize = metrics.isMobile ? "17px" : "17px";
     this.xpTrack.style.height = metrics.isMobile ? "10px" : "10px";
     this.xpDetail.style.fontSize = metrics.isMobile ? "13px" : "13px";
+    this.unlockedPhotoLabel.style.fontSize = metrics.isMobile ? "12px" : "11px";
+    this.unlockedPhotoFrame.style.borderRadius = metrics.isMobile ? "13px" : "14px";
     this.actionText.style.fontSize = metrics.isMobile ? "15px" : "14px";
   }
 

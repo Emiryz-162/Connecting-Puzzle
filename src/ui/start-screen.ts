@@ -19,6 +19,12 @@ interface CategoryDef {
   endLevel: number;
 }
 
+export interface AlbumEntry {
+  photoId: number;
+  src: string;
+  unlocked: boolean;
+}
+
 const LEVEL_CATEGORIES: CategoryDef[] = [
   { id: "foods", label: "Foods", startLevel: 1, endLevel: 10 },
   { id: "landmarks", label: "Landmarks", startLevel: 11, endLevel: 20 },
@@ -31,6 +37,7 @@ export class StartScreen {
   private readonly title: HTMLHeadingElement;
   private readonly playButton: HTMLButtonElement;
   private readonly sectionsButton: HTMLButtonElement;
+  private readonly albumButton: HTMLButtonElement;
   private readonly tutorialButton: HTMLButtonElement;
   private readonly settingsButton: HTMLButtonElement;
   private readonly nowPlayingCard: HTMLDivElement;
@@ -40,8 +47,34 @@ export class StartScreen {
   private readonly sectionsCloseButton: HTMLButtonElement;
   private readonly categoryButtons: HTMLButtonElement[] = [];
   private readonly levelButtons: HTMLButtonElement[] = [];
+  private readonly albumOverlay: HTMLDivElement;
+  private readonly albumPanel: HTMLDivElement;
+  private readonly albumCloseButton: HTMLButtonElement;
+  private readonly albumGrid: HTMLDivElement;
+  private readonly albumViewerOverlay: HTMLDivElement;
+  private readonly albumViewerDialog: HTMLDivElement;
+  private readonly albumViewerTitle: HTMLDivElement;
+  private readonly albumViewerImageWrap: HTMLDivElement;
+  private readonly albumViewerImage: HTMLImageElement;
+  private readonly albumViewerCloseButton: HTMLButtonElement;
+  private readonly albumViewerZoomOutButton: HTMLButtonElement;
+  private readonly albumViewerZoomResetButton: HTMLButtonElement;
+  private readonly albumViewerZoomInButton: HTMLButtonElement;
   private activeCategoryIndex = 0;
   private sectionsOpen = false;
+  private albumOpen = false;
+  private albumViewerOpen = false;
+  private albumEntries: AlbumEntry[] = [];
+  private albumViewerScale = 1;
+  private albumViewerOffsetX = 0;
+  private albumViewerOffsetY = 0;
+  private dragPointerId: number | null = null;
+  private dragStartClientX = 0;
+  private dragStartClientY = 0;
+  private dragStartOffsetX = 0;
+  private dragStartOffsetY = 0;
+  private readonly albumViewerPointers = new Map<number, { x: number; y: number }>();
+  private pinchLastDistance = 0;
   private levelState: LevelSelectState = {
     unlockedThroughLevel: 1,
     currentLevel: 1,
@@ -99,6 +132,13 @@ export class StartScreen {
     this.sectionsButton.setAttribute("aria-label", "Open levels");
     this.sectionsButton.append(this.createGridIcon(), this.createButtonLabel("LEVELS"));
 
+    this.albumButton = document.createElement("button");
+    this.albumButton.className = "sections-btn album-menu-btn";
+    this.albumButton.type = "button";
+    this.albumButton.setAttribute("aria-label", "Open album");
+    this.albumButton.setAttribute("title", "Album");
+    this.albumButton.append(this.createAlbumIcon(), this.createButtonLabel("ALBUM"));
+
     this.tutorialButton = document.createElement("button");
     this.tutorialButton.className = "sections-btn tutorial-menu-btn";
     this.tutorialButton.type = "button";
@@ -115,7 +155,13 @@ export class StartScreen {
 
     const actionArea = document.createElement("div");
     actionArea.className = "menu-actions";
-    actionArea.append(this.playButton, this.sectionsButton, this.tutorialButton, this.settingsButton);
+    actionArea.append(
+      this.playButton,
+      this.sectionsButton,
+      this.albumButton,
+      this.tutorialButton,
+      this.settingsButton
+    );
 
     this.nowPlayingCard = document.createElement("div");
     this.nowPlayingCard.className = "now-playing-card";
@@ -198,21 +244,138 @@ export class StartScreen {
     this.sectionsPanel.append(sectionsHeader, categoryRow, grid);
     this.sectionsOverlay.appendChild(this.sectionsPanel);
 
-    this.root.append(this.content, this.nowPlayingCard, this.sectionsOverlay);
+    this.albumOverlay = document.createElement("div");
+    this.albumOverlay.className = "sections-overlay album-overlay";
+
+    this.albumPanel = document.createElement("div");
+    this.albumPanel.className = "sections-panel album-panel";
+
+    const albumHeader = document.createElement("div");
+    albumHeader.className = "sections-header";
+
+    const albumHeadingWrap = document.createElement("div");
+    const albumTitle = document.createElement("h2");
+    albumTitle.className = "sections-title";
+    albumTitle.textContent = "ALBUM";
+    const albumSubtitle = document.createElement("p");
+    albumSubtitle.className = "sections-subtitle";
+    albumSubtitle.textContent = "Unlock photos by earning XP";
+    albumHeadingWrap.append(albumTitle, albumSubtitle);
+
+    this.albumCloseButton = document.createElement("button");
+    this.albumCloseButton.className = "sections-close-btn";
+    this.albumCloseButton.type = "button";
+    this.albumCloseButton.setAttribute("aria-label", "Close album");
+    this.albumCloseButton.append(this.createCloseIcon());
+
+    albumHeader.append(albumHeadingWrap, this.albumCloseButton);
+
+    this.albumGrid = document.createElement("div");
+    this.albumGrid.className = "album-grid";
+
+    this.albumPanel.append(albumHeader, this.albumGrid);
+    this.albumOverlay.appendChild(this.albumPanel);
+
+    this.albumViewerOverlay = document.createElement("div");
+    this.albumViewerOverlay.className = "album-viewer-overlay";
+
+    this.albumViewerDialog = document.createElement("div");
+    this.albumViewerDialog.className = "album-viewer-dialog";
+
+    const albumViewerTopRow = document.createElement("div");
+    albumViewerTopRow.className = "album-viewer-top-row";
+
+    this.albumViewerTitle = document.createElement("div");
+    this.albumViewerTitle.className = "album-viewer-title";
+    this.albumViewerTitle.textContent = "";
+
+    this.albumViewerCloseButton = document.createElement("button");
+    this.albumViewerCloseButton.className = "album-viewer-close-btn";
+    this.albumViewerCloseButton.type = "button";
+    this.albumViewerCloseButton.setAttribute("aria-label", "Close photo preview");
+    this.albumViewerCloseButton.append(this.createCloseIcon());
+
+    albumViewerTopRow.append(this.albumViewerTitle, this.albumViewerCloseButton);
+
+    this.albumViewerImageWrap = document.createElement("div");
+    this.albumViewerImageWrap.className = "album-viewer-image-wrap";
+
+    this.albumViewerImage = document.createElement("img");
+    this.albumViewerImage.className = "album-viewer-image";
+    this.albumViewerImage.alt = "Album photo preview";
+    this.albumViewerImage.decoding = "async";
+    this.albumViewerImage.loading = "lazy";
+    this.albumViewerImage.draggable = false;
+    this.albumViewerImageWrap.appendChild(this.albumViewerImage);
+
+    const albumViewerControls = document.createElement("div");
+    albumViewerControls.className = "album-viewer-controls";
+
+    this.albumViewerZoomOutButton = document.createElement("button");
+    this.albumViewerZoomOutButton.type = "button";
+    this.albumViewerZoomOutButton.className = "album-viewer-control-btn";
+    this.albumViewerZoomOutButton.textContent = "-";
+
+    this.albumViewerZoomResetButton = document.createElement("button");
+    this.albumViewerZoomResetButton.type = "button";
+    this.albumViewerZoomResetButton.className = "album-viewer-control-btn";
+    this.albumViewerZoomResetButton.textContent = "1x";
+
+    this.albumViewerZoomInButton = document.createElement("button");
+    this.albumViewerZoomInButton.type = "button";
+    this.albumViewerZoomInButton.className = "album-viewer-control-btn";
+    this.albumViewerZoomInButton.textContent = "+";
+
+    const albumViewerHint = document.createElement("div");
+    albumViewerHint.className = "album-viewer-hint";
+    albumViewerHint.textContent = "Zoom: +/- or pinch  Drag: photo";
+
+    albumViewerControls.append(
+      this.albumViewerZoomOutButton,
+      this.albumViewerZoomResetButton,
+      this.albumViewerZoomInButton,
+      albumViewerHint
+    );
+
+    this.albumViewerDialog.append(albumViewerTopRow, this.albumViewerImageWrap, albumViewerControls);
+    this.albumViewerOverlay.appendChild(this.albumViewerDialog);
+
+    this.root.append(
+      this.content,
+      this.nowPlayingCard,
+      this.sectionsOverlay,
+      this.albumOverlay,
+      this.albumViewerOverlay
+    );
     document.body.appendChild(this.root);
 
     this.renderSections();
+    this.renderAlbum();
     this.applyResponsiveStyles();
 
     this.playButton.addEventListener("click", this.handleStartClick);
     this.sectionsButton.addEventListener("click", this.handleSectionsClick);
+    this.albumButton.addEventListener("click", this.handleAlbumClick);
     this.tutorialButton.addEventListener("click", this.handleTutorialClick);
     this.settingsButton.addEventListener("click", this.handleSettingsClick);
     this.sectionsCloseButton.addEventListener("click", this.handleSectionsCloseClick);
     this.sectionsOverlay.addEventListener("click", this.handleSectionsBackdropClick);
+    this.albumCloseButton.addEventListener("click", this.handleAlbumCloseClick);
+    this.albumOverlay.addEventListener("click", this.handleAlbumBackdropClick);
+    this.albumViewerCloseButton.addEventListener("click", this.handleAlbumViewerCloseClick);
+    this.albumViewerOverlay.addEventListener("click", this.handleAlbumViewerBackdropClick);
+    this.albumViewerZoomOutButton.addEventListener("click", this.handleAlbumViewerZoomOutClick);
+    this.albumViewerZoomResetButton.addEventListener("click", this.handleAlbumViewerZoomResetClick);
+    this.albumViewerZoomInButton.addEventListener("click", this.handleAlbumViewerZoomInClick);
+    this.albumViewerImageWrap.addEventListener("wheel", this.handleAlbumViewerWheel, { passive: false });
+    this.albumViewerImageWrap.addEventListener("pointerdown", this.handleAlbumViewerPointerDown);
+    this.albumViewerImageWrap.addEventListener("pointermove", this.handleAlbumViewerPointerMove);
+    this.albumViewerImageWrap.addEventListener("pointerup", this.handleAlbumViewerPointerUp);
+    this.albumViewerImageWrap.addEventListener("pointercancel", this.handleAlbumViewerPointerUp);
 
     this.playButton.addEventListener("pointerdown", () => this.triggerHaptic("heavy"));
     this.sectionsButton.addEventListener("pointerdown", () => this.triggerHaptic("light"));
+    this.albumButton.addEventListener("pointerdown", () => this.triggerHaptic("light"));
     this.tutorialButton.addEventListener("pointerdown", () => this.triggerHaptic("light"));
     this.settingsButton.addEventListener("pointerdown", () => this.triggerHaptic("light"));
 
@@ -239,6 +402,19 @@ export class StartScreen {
     this.renderSections();
   }
 
+  setAlbumEntries(entries: AlbumEntry[]): void {
+    const normalized = [...entries]
+      .filter((entry) => Number.isFinite(entry.photoId) && entry.photoId > 0)
+      .sort((a, b) => a.photoId - b.photoId)
+      .map((entry) => ({
+        photoId: Math.floor(entry.photoId),
+        src: entry.src,
+        unlocked: !!entry.unlocked,
+      }));
+    this.albumEntries = normalized;
+    this.renderAlbum();
+  }
+
   show(): void {
     if (this.visible) {
       return;
@@ -263,6 +439,7 @@ export class StartScreen {
     }
     this.visible = false;
     this.closeSections();
+    this.closeAlbum();
     this.root.style.display = "none";
     this.root.style.pointerEvents = "none";
   }
@@ -270,10 +447,23 @@ export class StartScreen {
   destroy(): void {
     this.playButton.removeEventListener("click", this.handleStartClick);
     this.sectionsButton.removeEventListener("click", this.handleSectionsClick);
+    this.albumButton.removeEventListener("click", this.handleAlbumClick);
     this.tutorialButton.removeEventListener("click", this.handleTutorialClick);
     this.settingsButton.removeEventListener("click", this.handleSettingsClick);
     this.sectionsCloseButton.removeEventListener("click", this.handleSectionsCloseClick);
     this.sectionsOverlay.removeEventListener("click", this.handleSectionsBackdropClick);
+    this.albumCloseButton.removeEventListener("click", this.handleAlbumCloseClick);
+    this.albumOverlay.removeEventListener("click", this.handleAlbumBackdropClick);
+    this.albumViewerCloseButton.removeEventListener("click", this.handleAlbumViewerCloseClick);
+    this.albumViewerOverlay.removeEventListener("click", this.handleAlbumViewerBackdropClick);
+    this.albumViewerZoomOutButton.removeEventListener("click", this.handleAlbumViewerZoomOutClick);
+    this.albumViewerZoomResetButton.removeEventListener("click", this.handleAlbumViewerZoomResetClick);
+    this.albumViewerZoomInButton.removeEventListener("click", this.handleAlbumViewerZoomInClick);
+    this.albumViewerImageWrap.removeEventListener("wheel", this.handleAlbumViewerWheel);
+    this.albumViewerImageWrap.removeEventListener("pointerdown", this.handleAlbumViewerPointerDown);
+    this.albumViewerImageWrap.removeEventListener("pointermove", this.handleAlbumViewerPointerMove);
+    this.albumViewerImageWrap.removeEventListener("pointerup", this.handleAlbumViewerPointerUp);
+    this.albumViewerImageWrap.removeEventListener("pointercancel", this.handleAlbumViewerPointerUp);
     document.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("resize", this.onWindowResize);
     window.visualViewport?.removeEventListener("resize", this.onWindowResize);
@@ -291,6 +481,8 @@ export class StartScreen {
     this.playButton.style.fontSize = metrics.isMobile ? "30px" : "34px";
     this.sectionsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
     this.sectionsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
+    this.albumButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
+    this.albumButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
     this.tutorialButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
     this.tutorialButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
     this.settingsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
@@ -307,6 +499,14 @@ export class StartScreen {
     this.sectionsOverlay.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px)`;
     this.sectionsOverlay.style.paddingLeft = `${overlaySidePadding}px`;
     this.sectionsPanel.style.maxHeight =
+      `calc(100vh - (${safeTopCss}) - (env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px))`;
+
+    this.albumOverlay.style.alignItems = "flex-start";
+    this.albumOverlay.style.paddingTop = safeTopCss;
+    this.albumOverlay.style.paddingRight = `${overlaySidePadding}px`;
+    this.albumOverlay.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px)`;
+    this.albumOverlay.style.paddingLeft = `${overlaySidePadding}px`;
+    this.albumPanel.style.maxHeight =
       `calc(100vh - (${safeTopCss}) - (env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px))`;
   }
 
@@ -346,7 +546,64 @@ export class StartScreen {
     }
   }
 
+  private renderAlbum(): void {
+    this.albumGrid.replaceChildren();
+    if (this.albumEntries.length === 0) {
+      const emptyState = document.createElement("div");
+      emptyState.className = "album-empty-state";
+      emptyState.textContent = "No photos available yet.";
+      this.albumGrid.appendChild(emptyState);
+      return;
+    }
+
+    for (const entry of this.albumEntries) {
+      const card = entry.unlocked ? document.createElement("button") : document.createElement("div");
+      card.className = "album-photo-card";
+      card.classList.toggle("locked", !entry.unlocked);
+      if (entry.unlocked) {
+        (card as HTMLButtonElement).type = "button";
+        card.classList.add("unlockable");
+        (card as HTMLButtonElement).setAttribute(
+          "aria-label",
+          "Open photo preview"
+        );
+        (card as HTMLButtonElement).addEventListener("click", () => {
+          this.onUiClick?.();
+          this.openAlbumViewer(entry);
+        });
+      } else {
+        card.setAttribute("aria-hidden", "true");
+      }
+
+      const media = document.createElement("div");
+      media.className = "album-photo-media";
+
+      const image = document.createElement("img");
+      image.className = "album-photo-image";
+      image.src = entry.src;
+      image.alt = entry.unlocked ? "Unlocked photo" : "Locked photo";
+      image.loading = "lazy";
+      image.decoding = "async";
+      media.append(image);
+
+      if (!entry.unlocked) {
+        const lockOverlay = document.createElement("div");
+        lockOverlay.className = "album-photo-lock-overlay";
+        lockOverlay.append(this.createLockIcon());
+        media.appendChild(lockOverlay);
+      }
+
+      const caption = document.createElement("div");
+      caption.className = "album-photo-caption";
+      caption.textContent = entry.unlocked ? "Unlocked" : "Locked";
+
+      card.append(media, caption);
+      this.albumGrid.appendChild(card);
+    }
+  }
+
   private openSections(): void {
+    this.closeAlbum();
     this.activeCategoryIndex = this.findCategoryIndexForLevel(this.levelState.currentLevel);
     this.renderSections();
     this.sectionsOpen = true;
@@ -359,6 +616,135 @@ export class StartScreen {
     this.sectionsOpen = false;
     this.sectionsOverlay.classList.remove("is-open");
     this.sectionsOverlay.style.pointerEvents = "none";
+  }
+
+  private openAlbum(): void {
+    this.closeSections();
+    this.renderAlbum();
+    this.albumOpen = true;
+    this.albumOverlay.classList.add("is-open");
+    this.albumOverlay.style.pointerEvents = "auto";
+    this.albumCloseButton.focus({ preventScroll: true });
+  }
+
+  private closeAlbum(): void {
+    this.closeAlbumViewer();
+    this.albumOpen = false;
+    this.albumOverlay.classList.remove("is-open");
+    this.albumOverlay.style.pointerEvents = "none";
+  }
+
+  private openAlbumViewer(entry: AlbumEntry): void {
+    if (!entry.unlocked) {
+      return;
+    }
+    this.albumViewerOpen = true;
+    this.albumViewerTitle.textContent = "PHOTO";
+    this.albumViewerImage.src = entry.src;
+    this.albumViewerImage.alt = "Photo full size";
+    this.albumViewerScale = 1;
+    this.albumViewerOffsetX = 0;
+    this.albumViewerOffsetY = 0;
+    this.clearAlbumViewerPointers();
+    this.applyAlbumViewerTransform();
+    this.albumViewerOverlay.classList.add("is-open");
+    this.albumViewerOverlay.style.pointerEvents = "auto";
+    this.albumViewerCloseButton.focus({ preventScroll: true });
+  }
+
+  private closeAlbumViewer(): void {
+    this.albumViewerOpen = false;
+    this.clearAlbumViewerPointers();
+    this.albumViewerOverlay.classList.remove("is-open");
+    this.albumViewerOverlay.style.pointerEvents = "none";
+    this.albumViewerImage.removeAttribute("src");
+  }
+
+  private applyAlbumViewerTransform(): void {
+    this.albumViewerImage.style.transform =
+      `translate(${this.albumViewerOffsetX}px, ${this.albumViewerOffsetY}px) scale(${this.albumViewerScale})`;
+    this.albumViewerZoomResetButton.textContent = `${this.albumViewerScale.toFixed(1)}x`;
+    const isInteracting = this.dragPointerId !== null || this.albumViewerPointers.size >= 2;
+    this.albumViewerImageWrap.style.cursor = this.albumViewerScale > 1.01
+      ? isInteracting
+        ? "grabbing"
+        : "grab"
+      : "zoom-in";
+  }
+
+  private clampAlbumViewerOffsets(): void {
+    if (this.albumViewerScale <= 1.01) {
+      this.albumViewerOffsetX = 0;
+      this.albumViewerOffsetY = 0;
+      return;
+    }
+
+    const rect = this.albumViewerImageWrap.getBoundingClientRect();
+    const maxX = (rect.width * (this.albumViewerScale - 1)) / 2;
+    const maxY = (rect.height * (this.albumViewerScale - 1)) / 2;
+    this.albumViewerOffsetX = Math.max(-maxX, Math.min(maxX, this.albumViewerOffsetX));
+    this.albumViewerOffsetY = Math.max(-maxY, Math.min(maxY, this.albumViewerOffsetY));
+  }
+
+  private updateAlbumViewerScale(nextScale: number, focusX = 0, focusY = 0): void {
+    const clamped = Math.max(1, Math.min(4, nextScale));
+    if (Math.abs(clamped - this.albumViewerScale) < 0.001) {
+      return;
+    }
+
+    const previousScale = this.albumViewerScale;
+    this.albumViewerScale = clamped;
+
+    if (this.albumViewerScale <= 1.01) {
+      this.albumViewerOffsetX = 0;
+      this.albumViewerOffsetY = 0;
+    } else {
+      const ratio = this.albumViewerScale / previousScale;
+      this.albumViewerOffsetX = (this.albumViewerOffsetX - focusX) * ratio + focusX;
+      this.albumViewerOffsetY = (this.albumViewerOffsetY - focusY) * ratio + focusY;
+      this.clampAlbumViewerOffsets();
+    }
+
+    this.applyAlbumViewerTransform();
+  }
+
+  private clearAlbumViewerPointers(): void {
+    for (const pointerId of this.albumViewerPointers.keys()) {
+      if (this.albumViewerImageWrap.hasPointerCapture(pointerId)) {
+        this.albumViewerImageWrap.releasePointerCapture(pointerId);
+      }
+    }
+    this.albumViewerPointers.clear();
+    this.dragPointerId = null;
+    this.pinchLastDistance = 0;
+  }
+
+  private getViewerFocusFromClientPoint(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.albumViewerImageWrap.getBoundingClientRect();
+    return {
+      x: clientX - rect.left - rect.width / 2,
+      y: clientY - rect.top - rect.height / 2,
+    };
+  }
+
+  private getAlbumViewerPointerDistance(): number {
+    const points = Array.from(this.albumViewerPointers.values());
+    if (points.length < 2) {
+      return 0;
+    }
+    const dx = points[0].x - points[1].x;
+    const dy = points[0].y - points[1].y;
+    return Math.hypot(dx, dy);
+  }
+
+  private getAlbumViewerPointerFocus(): { x: number; y: number } {
+    const points = Array.from(this.albumViewerPointers.values());
+    if (points.length < 2) {
+      return { x: 0, y: 0 };
+    }
+    const midX = (points[0].x + points[1].x) / 2;
+    const midY = (points[0].y + points[1].y) / 2;
+    return this.getViewerFocusFromClientPoint(midX, midY);
   }
 
   private findCategoryIndexForLevel(levelId: number): number {
@@ -419,6 +805,19 @@ export class StartScreen {
     return svg;
   }
 
+  private createAlbumIcon(): SVGElement {
+    const svg = this.createBaseIcon(30, 30);
+    svg.setAttribute("viewBox", "0 0 24 24");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute(
+      "d",
+      "M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13zm2.5-.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-11zm1.25 3a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0zm-.75 8.5l3.1-3.4a1 1 0 0 1 1.46-.02l1.64 1.69 1.3-1.35a1 1 0 0 1 1.43.01L17 16.5H7z"
+    );
+    path.setAttribute("fill", "currentColor");
+    svg.appendChild(path);
+    return svg;
+  }
+
   private createMusicIcon(): SVGElement {
     const svg = this.createBaseIcon(20, 20);
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -470,6 +869,19 @@ export class StartScreen {
     return svg;
   }
 
+  private createLockIcon(): SVGElement {
+    const svg = this.createBaseIcon(26, 26);
+    svg.setAttribute("viewBox", "0 0 24 24");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute(
+      "d",
+      "M7 10V8a5 5 0 1 1 10 0v2h.5A1.5 1.5 0 0 1 19 11.5v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10H7zm2 0h6V8a3 3 0 1 0-6 0v2zm3 4a1.5 1.5 0 0 1 1.5 1.5c0 .58-.33 1.1-.83 1.35V18a.67.67 0 0 1-1.34 0v-1.15A1.5 1.5 0 0 1 12 14z"
+    );
+    path.setAttribute("fill", "currentColor");
+    svg.appendChild(path);
+    return svg;
+  }
+
   private createBaseIcon(width: number, height: number): SVGElement {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 34 34");
@@ -485,11 +897,18 @@ export class StartScreen {
       this.closeSections();
       return;
     }
+    if (this.albumOpen) {
+      this.closeAlbum();
+      return;
+    }
     this.onStart();
   };
 
   private handleSectionsClick = (): void => {
     this.onUiClick?.();
+    if (this.albumOpen) {
+      this.closeAlbum();
+    }
     if (this.sectionsOpen) {
       this.closeSections();
       return;
@@ -497,9 +916,24 @@ export class StartScreen {
     this.openSections();
   };
 
+  private handleAlbumClick = (): void => {
+    this.onUiClick?.();
+    if (this.sectionsOpen) {
+      this.closeSections();
+    }
+    if (this.albumOpen) {
+      this.closeAlbum();
+      return;
+    }
+    this.openAlbum();
+  };
+
   private handleTutorialClick = (): void => {
     if (this.sectionsOpen) {
       this.closeSections();
+    }
+    if (this.albumOpen) {
+      this.closeAlbum();
     }
     this.onOpenTutorial();
   };
@@ -516,15 +950,181 @@ export class StartScreen {
     }
   };
 
+  private handleAlbumCloseClick = (): void => {
+    this.onUiClick?.();
+    this.closeAlbum();
+  };
+
+  private handleAlbumBackdropClick = (event: MouseEvent): void => {
+    if (event.target === this.albumOverlay) {
+      this.onUiClick?.();
+      this.closeAlbum();
+    }
+  };
+
+  private handleAlbumViewerCloseClick = (): void => {
+    this.onUiClick?.();
+    this.closeAlbumViewer();
+  };
+
+  private handleAlbumViewerBackdropClick = (event: MouseEvent): void => {
+    if (event.target === this.albumViewerOverlay) {
+      this.onUiClick?.();
+      this.closeAlbumViewer();
+    }
+  };
+
+  private handleAlbumViewerZoomOutClick = (): void => {
+    this.updateAlbumViewerScale(this.albumViewerScale - 0.3);
+  };
+
+  private handleAlbumViewerZoomResetClick = (): void => {
+    this.albumViewerScale = 1;
+    this.albumViewerOffsetX = 0;
+    this.albumViewerOffsetY = 0;
+    this.applyAlbumViewerTransform();
+  };
+
+  private handleAlbumViewerZoomInClick = (): void => {
+    this.updateAlbumViewerScale(this.albumViewerScale + 0.3);
+  };
+
+  private handleAlbumViewerWheel = (event: WheelEvent): void => {
+    if (!this.albumViewerOpen) {
+      return;
+    }
+    event.preventDefault();
+
+    const rect = this.albumViewerImageWrap.getBoundingClientRect();
+    const focusX = event.clientX - rect.left - rect.width / 2;
+    const focusY = event.clientY - rect.top - rect.height / 2;
+    const direction = event.deltaY > 0 ? -1 : 1;
+    this.updateAlbumViewerScale(this.albumViewerScale + direction * 0.18, focusX, focusY);
+  };
+
+  private handleAlbumViewerPointerDown = (event: PointerEvent): void => {
+    if (!this.albumViewerOpen) {
+      return;
+    }
+    this.albumViewerPointers.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+    this.albumViewerImageWrap.setPointerCapture(event.pointerId);
+
+    if (this.albumViewerPointers.size >= 2) {
+      this.dragPointerId = null;
+      this.pinchLastDistance = this.getAlbumViewerPointerDistance();
+    } else if (this.albumViewerScale > 1.01) {
+      this.dragPointerId = event.pointerId;
+      this.dragStartClientX = event.clientX;
+      this.dragStartClientY = event.clientY;
+      this.dragStartOffsetX = this.albumViewerOffsetX;
+      this.dragStartOffsetY = this.albumViewerOffsetY;
+    } else {
+      this.dragPointerId = null;
+    }
+
+    this.applyAlbumViewerTransform();
+    event.preventDefault();
+  };
+
+  private handleAlbumViewerPointerMove = (event: PointerEvent): void => {
+    if (!this.albumViewerOpen || !this.albumViewerPointers.has(event.pointerId)) {
+      return;
+    }
+    this.albumViewerPointers.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    if (this.albumViewerPointers.size >= 2) {
+      const distance = this.getAlbumViewerPointerDistance();
+      if (distance > 0) {
+        if (this.pinchLastDistance > 0) {
+          const focus = this.getAlbumViewerPointerFocus();
+          const nextScale = this.albumViewerScale * (distance / this.pinchLastDistance);
+          this.updateAlbumViewerScale(nextScale, focus.x, focus.y);
+        }
+        this.pinchLastDistance = distance;
+      }
+      this.dragPointerId = null;
+      this.applyAlbumViewerTransform();
+      event.preventDefault();
+      return;
+    }
+
+    this.pinchLastDistance = 0;
+    if (this.dragPointerId !== event.pointerId || this.albumViewerScale <= 1.01) {
+      this.applyAlbumViewerTransform();
+      event.preventDefault();
+      return;
+    }
+
+    this.albumViewerOffsetX = this.dragStartOffsetX + (event.clientX - this.dragStartClientX);
+    this.albumViewerOffsetY = this.dragStartOffsetY + (event.clientY - this.dragStartClientY);
+    this.clampAlbumViewerOffsets();
+    this.applyAlbumViewerTransform();
+    event.preventDefault();
+  };
+
+  private handleAlbumViewerPointerUp = (event: PointerEvent): void => {
+    this.albumViewerPointers.delete(event.pointerId);
+    if (this.albumViewerImageWrap.hasPointerCapture(event.pointerId)) {
+      this.albumViewerImageWrap.releasePointerCapture(event.pointerId);
+    }
+
+    if (this.albumViewerPointers.size >= 2) {
+      this.pinchLastDistance = this.getAlbumViewerPointerDistance();
+      this.dragPointerId = null;
+      this.applyAlbumViewerTransform();
+      event.preventDefault();
+      return;
+    }
+
+    this.pinchLastDistance = 0;
+    const remaining = Array.from(this.albumViewerPointers.entries())[0];
+    if (remaining && this.albumViewerScale > 1.01) {
+      this.dragPointerId = remaining[0];
+      this.dragStartClientX = remaining[1].x;
+      this.dragStartClientY = remaining[1].y;
+      this.dragStartOffsetX = this.albumViewerOffsetX;
+      this.dragStartOffsetY = this.albumViewerOffsetY;
+    } else {
+      this.dragPointerId = null;
+    }
+    this.applyAlbumViewerTransform();
+    event.preventDefault();
+  };
+
   private handleSettingsClick = (): void => {
     if (this.sectionsOpen) {
       this.closeSections();
+    }
+    if (this.albumOpen) {
+      this.closeAlbum();
     }
     this.onOpenSettings();
   };
 
   private handleKeyDown = (event: KeyboardEvent): void => {
     if (!this.visible) {
+      return;
+    }
+
+    if (this.albumViewerOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeAlbumViewer();
+      }
+      return;
+    }
+
+    if (this.albumOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeAlbum();
+      }
       return;
     }
 
