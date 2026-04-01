@@ -22,7 +22,37 @@ function resolveBridgeFunction<K extends "triggerHaptic" | "submitScore">(
     // no-op (cross-origin parent access can throw)
   }
 
+  try {
+    const topWindow = window.top as OasizWindow;
+    const topFn =
+      topWindow && topWindow !== window && topWindow !== window.parent
+        ? topWindow[key]
+        : undefined;
+    if (typeof topFn === "function") {
+      return topFn;
+    }
+  } catch {
+    // no-op (cross-origin top access can throw)
+  }
+
   return null;
+}
+
+function resolveVibratePattern(pattern: string): number | number[] {
+  switch (pattern) {
+    case "light":
+      return 10;
+    case "medium":
+      return 20;
+    case "heavy":
+      return 32;
+    case "success":
+      return [12, 18, 12];
+    case "error":
+      return [24, 18, 24];
+    default:
+      return 10;
+  }
 }
 
 export function triggerOasizHaptic(pattern: string, enabled: boolean): void {
@@ -34,6 +64,11 @@ export function triggerOasizHaptic(pattern: string, enabled: boolean): void {
     const fn = resolveBridgeFunction("triggerHaptic");
     if (typeof fn === "function") {
       fn(pattern);
+      return;
+    }
+
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(resolveVibratePattern(pattern));
     }
   } catch {
     // no-op
