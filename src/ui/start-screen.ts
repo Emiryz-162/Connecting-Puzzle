@@ -124,44 +124,53 @@ export class StartScreen {
     this.playButton.className = "play-btn";
     this.playButton.type = "button";
     this.playButton.setAttribute("aria-label", "Start game");
-    this.playButton.append(this.createPlayIcon(), this.createButtonLabel("PLAY"));
+    this.playButton.append(this.createMenuImageIcon("/assets/icons/play-clean.png"), this.createButtonLabel("PLAY"));
 
     this.sectionsButton = document.createElement("button");
     this.sectionsButton.className = "sections-btn";
     this.sectionsButton.type = "button";
     this.sectionsButton.setAttribute("aria-label", "Open levels");
-    this.sectionsButton.append(this.createGridIcon(), this.createButtonLabel("LEVELS"));
+    this.sectionsButton.append(
+      this.createMenuImageIcon("/assets/icons/levels-clean.png"),
+      this.createButtonLabel("LEVELS")
+    );
 
     this.albumButton = document.createElement("button");
     this.albumButton.className = "sections-btn album-menu-btn";
     this.albumButton.type = "button";
     this.albumButton.setAttribute("aria-label", "Open album");
     this.albumButton.setAttribute("title", "Album");
-    this.albumButton.append(this.createAlbumIcon(), this.createButtonLabel("ALBUM"));
+    this.albumButton.append(
+      this.createMenuImageIcon("/assets/icons/album-clean.png"),
+      this.createButtonLabel("ALBUM")
+    );
 
     this.tutorialButton = document.createElement("button");
     this.tutorialButton.className = "sections-btn tutorial-menu-btn";
     this.tutorialButton.type = "button";
     this.tutorialButton.setAttribute("aria-label", "Open tutorial");
     this.tutorialButton.setAttribute("title", "Tutorial");
-    this.tutorialButton.append(this.createTutorialIcon(), this.createButtonLabel("TUTORIAL"));
+    this.tutorialButton.append(
+      this.createMenuImageIcon("/assets/icons/education-clean.png"),
+      this.createButtonLabel("TUTORIAL")
+    );
 
     this.settingsButton = document.createElement("button");
     this.settingsButton.className = "sections-btn settings-menu-btn";
     this.settingsButton.type = "button";
     this.settingsButton.setAttribute("aria-label", "Open settings");
     this.settingsButton.setAttribute("title", "Settings");
-    this.settingsButton.append(this.createSettingsImageIcon(), this.createButtonLabel("SETTINGS"));
+    this.settingsButton.append(
+      this.createMenuImageIcon("/assets/icons/settings-clean.png"),
+      this.createButtonLabel("SETTINGS")
+    );
 
     const actionArea = document.createElement("div");
     actionArea.className = "menu-actions";
-    actionArea.append(
-      this.playButton,
-      this.sectionsButton,
-      this.albumButton,
-      this.tutorialButton,
-      this.settingsButton
-    );
+    const menuGrid = document.createElement("div");
+    menuGrid.className = "menu-secondary-actions";
+    menuGrid.append(this.sectionsButton, this.tutorialButton, this.albumButton, this.settingsButton);
+    actionArea.append(this.playButton, menuGrid);
 
     this.nowPlayingCard = document.createElement("div");
     this.nowPlayingCard.className = "now-playing-card";
@@ -473,20 +482,22 @@ export class StartScreen {
   private applyResponsiveStyles(): void {
     const metrics = getUiMetrics();
     const overlaySidePadding = 14;
+    const albumTopInset = metrics.isMobile ? "6vh" : "4vh";
+    const albumBottomInset = metrics.isMobile ? "9vh" : "6vh";
     const safeTopCss = getSafeTopOffsetCss(0);
 
     this.title.style.fontSize = metrics.isMobile ? "72px" : "86px";
-    this.title.style.marginBottom = metrics.isMobile ? "30px" : "34px";
+    this.title.style.marginBottom = metrics.isMobile ? "52px" : "38px";
     this.playButton.style.minHeight = metrics.isMobile ? "84px" : "96px";
     this.playButton.style.fontSize = metrics.isMobile ? "30px" : "34px";
-    this.sectionsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
-    this.sectionsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
-    this.albumButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
-    this.albumButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
-    this.tutorialButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
-    this.tutorialButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
-    this.settingsButton.style.minHeight = metrics.isMobile ? "74px" : "84px";
-    this.settingsButton.style.fontSize = metrics.isMobile ? "24px" : "26px";
+    this.sectionsButton.style.minHeight = metrics.isMobile ? "72px" : "80px";
+    this.sectionsButton.style.fontSize = metrics.isMobile ? "16px" : "17px";
+    this.albumButton.style.minHeight = metrics.isMobile ? "72px" : "80px";
+    this.albumButton.style.fontSize = metrics.isMobile ? "16px" : "17px";
+    this.tutorialButton.style.minHeight = metrics.isMobile ? "72px" : "80px";
+    this.tutorialButton.style.fontSize = metrics.isMobile ? "16px" : "17px";
+    this.settingsButton.style.minHeight = metrics.isMobile ? "72px" : "80px";
+    this.settingsButton.style.fontSize = metrics.isMobile ? "16px" : "17px";
     this.content.style.justifyContent = metrics.isMobile ? "flex-start" : "center";
     this.content.style.paddingTop = metrics.isMobile ? `calc(${safeTopCss} + 22px)` : "0px";
     this.content.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${metrics.isMobile ? 32 : 42}px)`;
@@ -502,12 +513,13 @@ export class StartScreen {
       `calc(100vh - (${safeTopCss}) - (env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px))`;
 
     this.albumOverlay.style.alignItems = "flex-start";
-    this.albumOverlay.style.paddingTop = safeTopCss;
+    this.albumOverlay.style.paddingTop = `calc(${safeTopCss} + ${albumTopInset})`;
     this.albumOverlay.style.paddingRight = `${overlaySidePadding}px`;
-    this.albumOverlay.style.paddingBottom = `calc(env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px)`;
+    this.albumOverlay.style.paddingBottom =
+      `calc(env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px + ${albumBottomInset})`;
     this.albumOverlay.style.paddingLeft = `${overlaySidePadding}px`;
     this.albumPanel.style.maxHeight =
-      `calc(100vh - (${safeTopCss}) - (env(safe-area-inset-bottom, 0px) + ${overlaySidePadding}px))`;
+      `calc(100vh - (${safeTopCss}) - env(safe-area-inset-bottom, 0px) - ${albumTopInset} - ${albumBottomInset} - ${overlaySidePadding}px)`;
   }
 
   private renderSections(): void {
@@ -783,39 +795,15 @@ export class StartScreen {
     return label;
   }
 
-  private createPlayIcon(): SVGElement {
-    const svg = this.createBaseIcon(34, 34);
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", "M8 5.5L27 17L8 28.5V5.5Z");
-    path.setAttribute("fill", "currentColor");
-    svg.appendChild(path);
-    return svg;
-  }
-
-  private createGridIcon(): SVGElement {
-    const svg = this.createBaseIcon(30, 30);
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute(
-      "d",
-      "M4 4h7v7H4V4zm9 0h7v7h-7V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7zm9 0h7v7h-7v-7zM4 22h7v7H4v-7zm9 0h7v7h-7v-7zm9 0h7v7h-7v-7z"
-    );
-    path.setAttribute("fill", "currentColor");
-    svg.setAttribute("viewBox", "0 0 33 33");
-    svg.appendChild(path);
-    return svg;
-  }
-
-  private createAlbumIcon(): SVGElement {
-    const svg = this.createBaseIcon(30, 30);
-    svg.setAttribute("viewBox", "0 0 24 24");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute(
-      "d",
-      "M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13zm2.5-.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-11zm1.25 3a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0zm-.75 8.5l3.1-3.4a1 1 0 0 1 1.46-.02l1.64 1.69 1.3-1.35a1 1 0 0 1 1.43.01L17 16.5H7z"
-    );
-    path.setAttribute("fill", "currentColor");
-    svg.appendChild(path);
-    return svg;
+  private createMenuImageIcon(src: string): HTMLImageElement {
+    const image = document.createElement("img");
+    image.className = "menu-btn-icon";
+    image.src = src;
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    image.decoding = "async";
+    image.loading = "lazy";
+    return image;
   }
 
   private createMusicIcon(): SVGElement {
@@ -828,32 +816,6 @@ export class StartScreen {
     path.setAttribute("fill", "currentColor");
     svg.appendChild(path);
     return svg;
-  }
-
-  private createTutorialIcon(): SVGElement {
-    const svg = this.createBaseIcon(30, 30);
-    svg.setAttribute("viewBox", "0 0 24 24");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute(
-      "d",
-      "M12 2l2.4 4.86 5.36.78-3.88 3.78.92 5.34L12 14.9 7.2 16.76l.92-5.34L4.24 7.64l5.36-.78L12 2z"
-    );
-    path.setAttribute("fill", "currentColor");
-    svg.appendChild(path);
-    return svg;
-  }
-
-  private createSettingsImageIcon(): HTMLImageElement {
-    const image = document.createElement("img");
-    image.src = "/assets/icons/settings-clean.png";
-    image.alt = "";
-    image.setAttribute("aria-hidden", "true");
-    image.decoding = "async";
-    image.style.width = "30px";
-    image.style.height = "30px";
-    image.style.objectFit = "contain";
-    image.style.display = "block";
-    return image;
   }
 
   private createCloseIcon(): SVGElement {
