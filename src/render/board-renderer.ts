@@ -11,8 +11,6 @@ import {
 
 type TileImageResolver = (tileType: TileTypeId) => CanvasImageSource | null;
 const TILE_IMAGE_FIT_RATIO = 0.92;
-const TILE_IMAGE_ALPHA = 0.92;
-const TRANSPARENT_TILE_CACHE = new WeakMap<CanvasImageSource, HTMLCanvasElement>();
 
 export interface MergePullRenderItem {
   from: Coord;
@@ -687,7 +685,8 @@ function drawTileSprite(
 ): void {
   const imageSource = resolveTileImage?.(tileType) ?? null;
   if (imageSource) {
-    drawStyledTileImage(
+    // Menu uses raw <img> assets directly, so draw tile art without extra canvas post-processing.
+    drawTileImage(
       ctx,
       imageSource,
       cx,
@@ -907,178 +906,6 @@ function drawEmptyCellPortal(
   ctx.stroke();
 
   ctx.restore();
-}
-
-function drawStyledTileImage(
-  ctx: CanvasRenderingContext2D,
-  image: CanvasImageSource,
-  cx: number,
-  cy: number,
-  maxW: number,
-  maxH: number
-): void {
-  const prepared = prepareTransparentTileImage(image);
-  const size = getImageSourceSize(prepared);
-  if (!size) {
-    return;
-  }
-
-  const frameSize = Math.max(8, Math.min(maxW, maxH));
-  const frameX = cx - frameSize / 2;
-  const frameY = cy - frameSize / 2;
-  const frameRadius = Math.max(8, frameSize * 0.22);
-  const innerPadding = Math.max(4, frameSize * 0.12);
-  const drawAreaW = frameSize - innerPadding * 2;
-  const drawAreaH = frameSize - innerPadding * 2;
-
-  ctx.save();
-  ctx.shadowColor = "rgba(119, 82, 67, 0.2)";
-  ctx.shadowBlur = Math.max(4, frameSize * 0.1);
-  ctx.shadowOffsetY = Math.max(2, frameSize * 0.06);
-  const frameGradient = ctx.createLinearGradient(frameX, frameY, frameX, frameY + frameSize);
-  frameGradient.addColorStop(0, "rgba(255, 248, 242, 0.98)");
-  frameGradient.addColorStop(1, "rgba(248, 223, 205, 0.95)");
-  ctx.fillStyle = frameGradient;
-  roundRect(ctx, frameX, frameY, frameSize, frameSize, frameRadius);
-  ctx.fill();
-  ctx.restore();
-
-  ctx.save();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
-  ctx.lineWidth = 1.2;
-  roundRect(ctx, frameX + 0.5, frameY + 0.5, frameSize - 1, frameSize - 1, frameRadius);
-  ctx.stroke();
-  ctx.restore();
-
-  const scale = Math.min(drawAreaW / size.width, drawAreaH / size.height);
-  const drawW = Math.max(1, Math.round(size.width * scale));
-  const drawH = Math.max(1, Math.round(size.height * scale));
-  const drawX = Math.round(cx - drawW / 2);
-  const drawY = Math.round(cy - drawH / 2);
-
-  ctx.save();
-  roundRect(
-    ctx,
-    frameX + innerPadding / 2,
-    frameY + innerPadding / 2,
-    frameSize - innerPadding,
-    frameSize - innerPadding,
-    Math.max(6, frameRadius - innerPadding * 0.4)
-  );
-  ctx.clip();
-  ctx.globalAlpha = TILE_IMAGE_ALPHA;
-  ctx.drawImage(prepared, drawX, drawY, drawW, drawH);
-  ctx.restore();
-}
-
-function prepareTransparentTileImage(image: CanvasImageSource): CanvasImageSource {
-  if (TRANSPARENT_TILE_CACHE.has(image)) {
-    return TRANSPARENT_TILE_CACHE.get(image)!;
-  }
-
-  if (typeof document === "undefined") {
-    return image;
-  }
-
-  const size = getImageSourceSize(image);
-  if (!size) {
-    return image;
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = size.width;
-  canvas.height = size.height;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) {
-    return image;
-  }
-
-  ctx.drawImage(image, 0, 0, size.width, size.height);
-  const imageData = ctx.getImageData(0, 0, size.width, size.height);
-  const d = imageData.data;
-  const original = new Uint8ClampedArray(d);
-
-  // IMPORTANT:
-  // Remove only panel-blue pixels connected to the image border.
-  // This preserves blue details inside the icon (planets/gems/etc).
-  const w = size.width;
-  const h = size.height;
-  const visited = new Uint8Array(w * h);
-  const queue = new Int32Array(w * h);
-  let head = 0;
-  let tail = 0;
-
-  const tryEnqueue = (x: number, y: number): void => {
-    if (x < 0 || x >= w || y < 0 || y >= h) return;
-    const idx = y * w + x;
-    if (visited[idx] === 1) return;
-    const p = idx * 4;
-    if (!isLikelyPanelBlue(d[p], d[p + 1], d[p + 2], d[p + 3])) return;
-    visited[idx] = 1;
-    queue[tail++] = idx;
-  };
-
-  for (let x = 0; x < w; x++) {
-    tryEnqueue(x, 0);
-    tryEnqueue(x, h - 1);
-  }
-  for (let y = 1; y < h - 1; y++) {
-    tryEnqueue(0, y);
-    tryEnqueue(w - 1, y);
-  }
-
-  while (head < tail) {
-    const idx = queue[head++];
-    const x = idx % w;
-    const y = (idx / w) | 0;
-    tryEnqueue(x - 1, y);
-    tryEnqueue(x + 1, y);
-    tryEnqueue(x, y - 1);
-    tryEnqueue(x, y + 1);
-  }
-
-  let totalOpaque = 0;
-  let affectedOpaque = 0;
-  for (let idx = 0; idx < visited.length; idx++) {
-    const p = idx * 4;
-    if (original[p + 3] > 8) {
-      totalOpaque++;
-      if (visited[idx] === 1) {
-        affectedOpaque++;
-      }
-    }
-  }
-  const affectedRatio = totalOpaque > 0 ? affectedOpaque / totalOpaque : 0;
-
-  // If the cleanup would wipe most of the icon, use a much softer pass.
-  // This protects assets whose foreground itself is blue-ish (e.g. some planets).
-  const destructiveCleanup = affectedRatio > 0.72;
-
-  for (let idx = 0; idx < visited.length; idx++) {
-    if (visited[idx] !== 1) continue;
-    const p = idx * 4;
-    const r = d[p];
-    const g = d[p + 1];
-    const b = d[p + 2];
-    const a = d[p + 3];
-    const maxRG = Math.max(r, g);
-    const strength = Math.min(1, (b - maxRG) / 120 + (130 - Math.min(130, r)) / 220);
-    const targetAlpha = destructiveCleanup
-      ? a * (0.55 + (1 - strength) * 0.16)
-      : a * (0.05 + (1 - strength) * 0.12);
-    d[p + 3] = Math.max(0, Math.min(255, Math.round(targetAlpha)));
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-  TRANSPARENT_TILE_CACHE.set(image, canvas);
-  return canvas;
-}
-
-function isLikelyPanelBlue(r: number, g: number, b: number, a: number): boolean {
-  if (a <= 0) return false;
-  const maxRG = Math.max(r, g);
-  const blueDominant = b > maxRG * 1.18;
-  return blueDominant && b > 58 && r < 170 && g < 185 && (b - maxRG) > 14;
 }
 
 function drawTileImage(
