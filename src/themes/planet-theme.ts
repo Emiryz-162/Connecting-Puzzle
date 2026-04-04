@@ -1,3 +1,5 @@
+import { assetUrl } from "../platform/asset-url";
+
 export const PLANET_TILE_TEXTURE_KEYS = [
   "tile_planet_01",
   "tile_planet_02",
@@ -12,14 +14,14 @@ export const PLANET_TILE_TEXTURE_KEYS = [
 export type PlanetTileTextureKey = (typeof PLANET_TILE_TEXTURE_KEYS)[number];
 
 export const PLANET_TILE_ASSET_PATHS: Record<PlanetTileTextureKey, string> = {
-  tile_planet_01: "/assets/tiles/planets/planet_01.png",
-  tile_planet_02: "/assets/tiles/planets/planet_02.png",
-  tile_planet_03: "/assets/tiles/planets/planet_03.png",
-  tile_planet_04: "/assets/tiles/planets/planet_04.png",
-  tile_planet_05: "/assets/tiles/planets/planet_05.png",
-  tile_planet_06: "/assets/tiles/planets/planet_06.png",
-  tile_planet_07: "/assets/tiles/planets/planet_07.png",
-  tile_planet_08: "/assets/tiles/planets/planet_08.png",
+  tile_planet_01: assetUrl("assets/tiles/planets/planet_01.png"),
+  tile_planet_02: assetUrl("assets/tiles/planets/planet_02.png"),
+  tile_planet_03: assetUrl("assets/tiles/planets/planet_03.png"),
+  tile_planet_04: assetUrl("assets/tiles/planets/planet_04.png"),
+  tile_planet_05: assetUrl("assets/tiles/planets/planet_05.png"),
+  tile_planet_06: assetUrl("assets/tiles/planets/planet_06.png"),
+  tile_planet_07: assetUrl("assets/tiles/planets/planet_07.png"),
+  tile_planet_08: assetUrl("assets/tiles/planets/planet_08.png"),
 };
 
 export interface TileThemeDefinition {

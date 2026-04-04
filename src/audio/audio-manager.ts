@@ -1,3 +1,5 @@
+import { assetUrl } from "../platform/asset-url";
+
 export const GAME_SOUNDS = {
   TILE_SELECT_SOFT: "tile_select_soft",
   TILE_DESELECT_SOFT: "tile_deselect_soft",
@@ -32,139 +34,132 @@ interface SoundConfig {
 
 const SOUND_CONFIG: Record<GameSoundName, SoundConfig> = {
   tile_select_soft: {
-    src: "/assets/sounds/tile_select_soft.wav",
+    src: "assets/sounds/tile_select_soft.wav",
     volume: 0.52,
     cooldownMs: 45,
     restartIfPlaying: true,
   },
   tile_deselect_soft: {
-    src: "/assets/sounds/tile_deselect_soft.wav",
+    src: "assets/sounds/tile_deselect_soft.wav",
     volume: 0.5,
     cooldownMs: 45,
     restartIfPlaying: true,
   },
   tile_no_match: {
-    src: "/assets/sounds/tile_no_match.wav",
+    src: "assets/sounds/tile_no_match.wav",
     volume: 0.62,
     cooldownMs: 120,
     restartIfPlaying: true,
   },
   tile_match_success: {
-    src: "/assets/sounds/tile_match_success.wav",
+    src: "assets/sounds/tile_match_success.wav",
     volume: 0.7,
     cooldownMs: 40,
     restartIfPlaying: true,
   },
   tile_match_chain: {
-    src: "/assets/sounds/tile_match_chain.wav",
+    src: "assets/sounds/tile_match_chain.wav",
     volume: 0.72,
     cooldownMs: 120,
     restartIfPlaying: false,
   },
   tile_pop: {
-    src: "/assets/sounds/tile_pop.wav",
+    src: "assets/sounds/tile_pop.wav",
     volume: 0.76,
     cooldownMs: 45,
     restartIfPlaying: true,
   },
   frozen_break: {
-    src: "/assets/sounds/frozen_break.wav",
+    src: "assets/sounds/frozen_break.wav",
     volume: 0.68,
     cooldownMs: 120,
     restartIfPlaying: false,
   },
   gravity_drop: {
-    src: "/assets/sounds/gravity_drop.wav",
+    src: "assets/sounds/gravity_drop.wav",
     volume: 0.54,
     cooldownMs: 240,
     restartIfPlaying: false,
   },
   jumper_move: {
-    src: "/assets/sounds/jumper_move.wav",
+    src: "assets/sounds/jumper_move.wav",
     volume: 0.65,
     cooldownMs: 220,
     restartIfPlaying: false,
   },
   board_shuffle: {
-    src: "/assets/sounds/board_shuffle.wav",
+    src: "assets/sounds/board_shuffle.wav",
     volume: 0.66,
     cooldownMs: 400,
     restartIfPlaying: false,
   },
   hint_reveal: {
-    src: "/assets/sounds/hint_reveal.wav",
+    src: "assets/sounds/hint_reveal.wav",
     volume: 0.65,
     cooldownMs: 160,
     restartIfPlaying: false,
   },
   button_click_primary: {
-    src: "/assets/sounds/button_click_primary.wav",
+    src: "assets/sounds/button_click_primary.wav",
     volume: 0.58,
     cooldownMs: 50,
     restartIfPlaying: true,
   },
   settings_toggle_on: {
-    src: "/assets/sounds/settings_toggle_on.wav",
+    src: "assets/sounds/settings_toggle_on.wav",
     volume: 0.58,
     cooldownMs: 70,
     restartIfPlaying: true,
   },
   settings_toggle_off: {
-    src: "/assets/sounds/settings_toggle_off.wav",
+    src: "assets/sounds/settings_toggle_off.wav",
     volume: 0.58,
     cooldownMs: 70,
     restartIfPlaying: true,
   },
   level_complete: {
-    src: "/assets/sounds/level_complete.wav",
+    src: "assets/sounds/level_complete.wav",
     volume: 0.78,
     cooldownMs: 250,
     restartIfPlaying: false,
   },
   campaign_complete: {
-    src: "/assets/sounds/campaign_complete.wav",
+    src: "assets/sounds/campaign_complete.wav",
     volume: 0.82,
     cooldownMs: 250,
     restartIfPlaying: false,
   },
   xp_gain: {
-    src: "/assets/sounds/xp_gain.wav",
+    src: "assets/sounds/xp_gain.wav",
     volume: 0.63,
     cooldownMs: 180,
     restartIfPlaying: false,
   },
   time_low_warning: {
-    src: "/assets/sounds/time_low_warning.wav",
+    src: "assets/sounds/time_low_warning.wav",
     volume: 0.76,
     cooldownMs: 3500,
     restartIfPlaying: false,
   },
   time_up: {
-    src: "/assets/sounds/time_up.wav",
+    src: "assets/sounds/time_up.wav",
     volume: 0.8,
     cooldownMs: 1000,
     restartIfPlaying: false,
   },
   no_moves_warning: {
-    src: "/assets/sounds/no_moves_warning.wav",
+    src: "assets/sounds/no_moves_warning.wav",
     volume: 0.78,
     cooldownMs: 1000,
     restartIfPlaying: false,
   },
 };
 
-const GAMEPLAY_MUSIC_SRC = "/assets/music/gameplay_loop.mp3";
+const GAMEPLAY_MUSIC_SRC = "assets/music/gameplay_loop.mp3";
 const GAMEPLAY_MUSIC_VOLUME = 0.2;
 const MUSIC_FADE_IN_MS = 420;
 const MUSIC_FADE_OUT_MS = 280;
-const APP_BASE_URL = import.meta.env.BASE_URL || "/";
-
 type AudioContextCtor = new (contextOptions?: AudioContextOptions) => AudioContext;
-
-function resolveAssetUrl(path: string): string {
-  const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
-  return `${APP_BASE_URL}${normalizedPath}`;
-}
 
 function resolveAudioContextCtor(): AudioContextCtor | null {
   if (typeof window === "undefined") {
@@ -208,7 +203,7 @@ export class AudioManager {
 
     this.audioContext = this.createAudioContext();
 
-    this.musicAudio = new Audio(resolveAssetUrl(GAMEPLAY_MUSIC_SRC));
+    this.musicAudio = new Audio(assetUrl(GAMEPLAY_MUSIC_SRC));
     this.musicAudio.preload = "auto";
     this.musicAudio.loop = true;
     this.musicAudio.volume = 0;
@@ -317,7 +312,7 @@ export class AudioManager {
       const decodeResults = await Promise.all(
         sounds.map(async (sound) => {
           try {
-            const response = await fetch(resolveAssetUrl(SOUND_CONFIG[sound].src));
+            const response = await fetch(assetUrl(SOUND_CONFIG[sound].src));
             if (!response.ok) {
               return false;
             }
@@ -434,7 +429,7 @@ export class AudioManager {
     }
 
     const config = SOUND_CONFIG[sound];
-    const audio = new Audio(resolveAssetUrl(config.src));
+    const audio = new Audio(assetUrl(config.src));
     audio.preload = "auto";
     audio.volume = config.volume;
     this.audioBySound.set(sound, audio);

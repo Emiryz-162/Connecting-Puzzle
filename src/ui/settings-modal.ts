@@ -1,5 +1,6 @@
 ﻿import { Settings } from "../types";
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
+import { assetUrl } from "../platform/asset-url";
 
 type SettingsKey = keyof Settings;
 type OnSettingsChange = (settings: Settings) => void;
@@ -413,7 +414,7 @@ export class SettingsModal {
 
   private createSettingsIcon(): HTMLImageElement {
     const image = document.createElement("img");
-    image.src = "/assets/icons/settings-clean.png";
+    image.src = assetUrl("assets/icons/settings-clean.png");
     image.alt = "";
     image.setAttribute("aria-hidden", "true");
     image.decoding = "async";

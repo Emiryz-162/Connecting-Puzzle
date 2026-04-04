@@ -1,3 +1,5 @@
+import { assetUrl } from "../platform/asset-url";
+
 export const PHOTO_ALBUM_SIZE = 30;
 export const XP_PER_LEVEL_CLEAR = 50;
 export const XP_PER_PHOTO_UNLOCK = 150;
@@ -77,7 +79,7 @@ export function formatPhotoCode(photoId: number): string {
 }
 
 export function getPhotoAssetPath(photoId: number): string {
-  return `/assets/photos/${formatPhotoCode(photoId)}.png`;
+  return assetUrl(`assets/photos/${formatPhotoCode(photoId)}.png`);
 }
 
 export function getAllPhotoIdsSorted(totalPhotos = PHOTO_ALBUM_SIZE): number[] {

@@ -1,3 +1,5 @@
+import { assetUrl } from "../platform/asset-url";
+
 export const SPECIAL_TEXTURE_KEYS = {
   monkey: "special_monkey",
   iceOverlay: "special_ice_overlay",
@@ -7,9 +9,9 @@ export const SPECIAL_TEXTURE_KEYS = {
 } as const;
 
 export const SPECIAL_ASSET_PATHS: Record<(typeof SPECIAL_TEXTURE_KEYS)[keyof typeof SPECIAL_TEXTURE_KEYS], string> = {
-  [SPECIAL_TEXTURE_KEYS.monkey]: "/assets/special/monkey.png",
-  [SPECIAL_TEXTURE_KEYS.iceOverlay]: "/assets/special/ice_overlay.png",
-  [SPECIAL_TEXTURE_KEYS.foodsBackground]: "/assets/backgrounds/foods.png",
-  [SPECIAL_TEXTURE_KEYS.landmarksBackground]: "/assets/backgrounds/landmarks.png",
-  [SPECIAL_TEXTURE_KEYS.planetsBackground]: "/assets/backgrounds/planets.png",
+  [SPECIAL_TEXTURE_KEYS.monkey]: assetUrl("assets/special/monkey.png"),
+  [SPECIAL_TEXTURE_KEYS.iceOverlay]: assetUrl("assets/special/ice_overlay.png"),
+  [SPECIAL_TEXTURE_KEYS.foodsBackground]: assetUrl("assets/backgrounds/foods.png"),
+  [SPECIAL_TEXTURE_KEYS.landmarksBackground]: assetUrl("assets/backgrounds/landmarks.png"),
+  [SPECIAL_TEXTURE_KEYS.planetsBackground]: assetUrl("assets/backgrounds/planets.png"),
 };

@@ -1,4 +1,5 @@
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
+import { assetUrl } from "../platform/asset-url";
 
 type OnStart = () => void;
 type OnOpenSettings = () => void;
@@ -113,14 +114,14 @@ export class StartScreen {
     this.playButton.className = "play-btn";
     this.playButton.type = "button";
     this.playButton.setAttribute("aria-label", "Start game");
-    this.playButton.append(this.createMenuImageIcon("/assets/icons/play-clean.png"), this.createButtonLabel("PLAY"));
+    this.playButton.append(this.createMenuImageIcon("assets/icons/play-clean.png"), this.createButtonLabel("PLAY"));
 
     this.sectionsButton = document.createElement("button");
     this.sectionsButton.className = "sections-btn";
     this.sectionsButton.type = "button";
     this.sectionsButton.setAttribute("aria-label", "Open levels");
     this.sectionsButton.append(
-      this.createMenuImageIcon("/assets/icons/levels-clean.png"),
+      this.createMenuImageIcon("assets/icons/levels-clean.png"),
       this.createButtonLabel("LEVELS")
     );
 
@@ -130,7 +131,7 @@ export class StartScreen {
     this.albumButton.setAttribute("aria-label", "Open album");
     this.albumButton.setAttribute("title", "Album");
     this.albumButton.append(
-      this.createMenuImageIcon("/assets/icons/album-clean.png"),
+      this.createMenuImageIcon("assets/icons/album-clean.png"),
       this.createButtonLabel("ALBUM")
     );
 
@@ -140,7 +141,7 @@ export class StartScreen {
     this.tutorialButton.setAttribute("aria-label", "Open tutorial");
     this.tutorialButton.setAttribute("title", "Tutorial");
     this.tutorialButton.append(
-      this.createMenuImageIcon("/assets/icons/education-clean.png"),
+      this.createMenuImageIcon("assets/icons/education-clean.png"),
       this.createButtonLabel("TUTORIAL")
     );
 
@@ -150,7 +151,7 @@ export class StartScreen {
     this.settingsButton.setAttribute("aria-label", "Open settings");
     this.settingsButton.setAttribute("title", "Settings");
     this.settingsButton.append(
-      this.createMenuImageIcon("/assets/icons/settings-clean.png"),
+      this.createMenuImageIcon("assets/icons/settings-clean.png"),
       this.createButtonLabel("SETTINGS")
     );
 
@@ -776,7 +777,7 @@ export class StartScreen {
   private createMenuImageIcon(src: string): HTMLImageElement {
     const image = document.createElement("img");
     image.className = "menu-btn-icon";
-    image.src = src;
+    image.src = assetUrl(src);
     image.alt = "";
     image.setAttribute("aria-hidden", "true");
     image.decoding = "async";

@@ -1,3 +1,5 @@
+import { assetUrl } from "../platform/asset-url";
+
 export type TileThemeId = "foods" | "landmarks" | "planets";
 
 export interface TileThemeDefinition {
@@ -22,7 +24,7 @@ function buildThemeDefinition(id: TileThemeId): TileThemeDefinition {
     const singularPrefix = id === "foods" ? "food" : id === "landmarks" ? "landmark" : "planet";
     const textureKey = `tile_${id}_${suffix}`;
     tileTextureKeys.push(textureKey);
-    assetPathByKey[textureKey] = `/assets/tiles/${id}/${singularPrefix}_${suffix}.png`;
+    assetPathByKey[textureKey] = assetUrl(`assets/tiles/${id}/${singularPrefix}_${suffix}.png`);
   }
 
   return {

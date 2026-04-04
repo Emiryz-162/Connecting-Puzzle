@@ -1,4 +1,5 @@
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
+import { assetUrl } from "../platform/asset-url";
 
 type HomeClickHandler = () => void;
 
@@ -19,7 +20,7 @@ export class HomeButton {
     this.button.setAttribute("title", "Main menu");
 
     this.iconImage = document.createElement("img");
-    this.iconImage.src = "/assets/icons/home.png";
+    this.iconImage.src = assetUrl("assets/icons/home.png");
     this.iconImage.alt = "";
     this.iconImage.setAttribute("aria-hidden", "true");
     this.iconImage.decoding = "async";

@@ -1,4 +1,5 @@
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
+import { assetUrl } from "../platform/asset-url";
 
 type ReplayClickHandler = () => void;
 
@@ -19,7 +20,7 @@ export class ReplayButton {
     this.button.setAttribute("title", "Restart level");
 
     this.iconImage = document.createElement("img");
-    this.iconImage.src = "/assets/icons/replay.png";
+    this.iconImage.src = assetUrl("assets/icons/replay.png");
     this.iconImage.alt = "";
     this.iconImage.setAttribute("aria-hidden", "true");
     this.iconImage.decoding = "async";
@@ -128,7 +129,7 @@ export class ReplayButton {
 
   private async makeIconBackgroundTransparent(): Promise<void> {
     try {
-      const image = await this.loadImage("/assets/icons/replay.png");
+      const image = await this.loadImage(assetUrl("assets/icons/replay.png"));
       const canvas = document.createElement("canvas");
       canvas.width = image.naturalWidth;
       canvas.height = image.naturalHeight;

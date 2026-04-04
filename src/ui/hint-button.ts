@@ -1,4 +1,5 @@
 import { getSafeTopOffsetCss, getUiMetrics } from "./ui-metrics";
+import { assetUrl } from "../platform/asset-url";
 
 type HintClickHandler = () => void;
 
@@ -18,7 +19,7 @@ export class HintButton {
     this.button.setAttribute("aria-label", "Show a valid match hint");
     this.button.setAttribute("title", "Show hint");
     this.iconImage = document.createElement("img");
-    this.iconImage.src = "/assets/icons/magnifying-glass-clean.png";
+    this.iconImage.src = assetUrl("assets/icons/magnifying-glass-clean.png");
     this.iconImage.alt = "";
     this.iconImage.setAttribute("aria-hidden", "true");
     this.iconImage.decoding = "async";
