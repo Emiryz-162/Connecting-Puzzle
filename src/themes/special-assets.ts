@@ -11,7 +11,7 @@ export const SPECIAL_TEXTURE_KEYS = {
 export const SPECIAL_ASSET_PATHS: Record<(typeof SPECIAL_TEXTURE_KEYS)[keyof typeof SPECIAL_TEXTURE_KEYS], string> = {
   [SPECIAL_TEXTURE_KEYS.monkey]: assetUrl("assets/special/monkey.png"),
   [SPECIAL_TEXTURE_KEYS.iceOverlay]: assetUrl("assets/special/ice_overlay.png"),
-  [SPECIAL_TEXTURE_KEYS.foodsBackground]: assetUrl("assets/backgrounds/foods.png"),
-  [SPECIAL_TEXTURE_KEYS.landmarksBackground]: assetUrl("assets/backgrounds/landmarks.png"),
-  [SPECIAL_TEXTURE_KEYS.planetsBackground]: assetUrl("assets/backgrounds/planets.png"),
+  [SPECIAL_TEXTURE_KEYS.foodsBackground]: assetUrl("assets/backgrounds/foods.jpg"),
+  [SPECIAL_TEXTURE_KEYS.landmarksBackground]: assetUrl("assets/backgrounds/landmarks.jpg"),
+  [SPECIAL_TEXTURE_KEYS.planetsBackground]: assetUrl("assets/backgrounds/planets.jpg"),
 };

@@ -79,7 +79,7 @@ export function formatPhotoCode(photoId: number): string {
 }
 
 export function getPhotoAssetPath(photoId: number): string {
-  return assetUrl(`assets/photos/${formatPhotoCode(photoId)}.png`);
+  return assetUrl(`assets/photos/${formatPhotoCode(photoId)}.jpg`);
 }
 
 export function getAllPhotoIdsSorted(totalPhotos = PHOTO_ALBUM_SIZE): number[] {
