@@ -196,6 +196,11 @@ npm run doctor
 ---
 
 ## 📸 Screenshots
+<img width="376" height="816" alt="image" src="https://github.com/user-attachments/assets/01d33bd0-1a3b-4444-95b1-a6753128a8ff" />
+<img width="377" height="816" alt="image" src="https://github.com/user-attachments/assets/54a9b928-31b0-4811-afa2-9326541fbb16" />
+<img width="378" height="816" alt="image" src="https://github.com/user-attachments/assets/03b02a2e-320e-454f-bcf6-af05bc16b511" />
+<img width="376" height="811" alt="image" src="https://github.com/user-attachments/assets/777fef84-36e5-479c-854a-beaf7885c526" />
+
 
 ---
 
